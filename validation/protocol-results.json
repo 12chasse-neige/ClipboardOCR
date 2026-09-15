@@ -1,0 +1,20 @@
+{
+  "passed": [
+    "PNG recognition",
+    "TIFF recognition",
+    "warm model reuse",
+    "service crash",
+    "recovery",
+    "input cleanup",
+    "shutdown",
+    "allowlisted diagnostics"
+  ],
+  "cold_seconds": 7.721,
+  "warm_seconds": 3.163,
+  "diagnostics": [
+    "recognition_complete",
+    "recognition_complete",
+    "backend_crashed",
+    "recognition_complete"
+  ]
+}

@@ -1,0 +1,13 @@
+.DS_Store
+build/
+dist/
+__pycache__/
+*.pyc
+.venv*/
+.env
+*.log
+validation/*.aux
+validation/examples.pdf
+validation/blocks.json
+validation/recovery-debug.log
+validation/protocol-test-errors.log

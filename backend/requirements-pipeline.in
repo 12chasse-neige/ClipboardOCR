@@ -1,0 +1,5 @@
+paddlepaddle==3.2.1
+paddleocr[doc-parser]==3.7.0
+paddlex==3.7.2
+psutil==7.2.2
+huggingface-hub==1.31.0
