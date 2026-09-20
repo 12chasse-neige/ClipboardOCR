@@ -40,11 +40,18 @@ if ($LASTEXITCODE -ne 0) { throw "cuDNN installation failed with exit code $LAST
 & $python -c "from PIL import Image; Image.open(r'$root\assets\AppIcon.png').save(r'$root\assets\AppIcon.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])"
 if ($LASTEXITCODE -ne 0) { throw "Icon preparation failed with exit code $LASTEXITCODE" }
 $bundledLlama = Join-Path $root '.windows\tools\llama\llama-server.exe'
-if (-not (Test-Path -LiteralPath $bundledLlama) -and -not (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter llama-server.exe -Recurse -ErrorAction SilentlyContinue)) {
+$wingetPackages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+$installedLlama = if (Test-Path -LiteralPath $wingetPackages) {
+    Get-ChildItem -LiteralPath $wingetPackages -Filter llama-server.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+} else { $null }
+if (-not (Test-Path -LiteralPath $bundledLlama) -and -not $installedLlama) {
     winget install --id ggml.llamacpp --version b11026 --exact --accept-package-agreements --accept-source-agreements --silent
     if ($LASTEXITCODE -ne 0) { throw "llama.cpp installation failed with exit code $LASTEXITCODE" }
 }
-if (-not (Test-Path -LiteralPath $bundledLlama) -and -not (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter llama-server.exe -Recurse -ErrorAction SilentlyContinue)) {
+$installedLlama = if (Test-Path -LiteralPath $wingetPackages) {
+    Get-ChildItem -LiteralPath $wingetPackages -Filter llama-server.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+} else { $null }
+if (-not (Test-Path -LiteralPath $bundledLlama) -and -not $installedLlama) {
     throw 'llama-server.exe is missing after installation.'
 }
 & $python (Join-Path $PSScriptRoot 'download_models.py')

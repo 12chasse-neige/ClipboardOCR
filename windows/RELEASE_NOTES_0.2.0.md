@@ -1,4 +1,4 @@
-# Clipboard OCR v0.2.0 Preview 6
+# Clipboard OCR v0.2.0 Preview 7
 
 Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup.
 
@@ -23,6 +23,7 @@ Updated downloadable Windows installer built from `feature/Windows`. This is a *
 - Rotating local diagnostics that do not record images or recognized text
 - Idempotent source/runtime setup and revision-pinned GGUF model download
 - Setup now stops on dependency/model/GPU verification failures and writes `setup.log` instead of creating a broken shortcut
+- Setup failures keep a visible diagnostic window open instead of closing immediately
 - Conservative VRAM-based selection of one to four inference slots, with an explicit environment override
 
 ## Verification

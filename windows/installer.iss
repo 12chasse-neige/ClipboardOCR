@@ -5,7 +5,7 @@
   #error OutputDir is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-preview.6"
+  #define AppVersion "0.2.0-preview.7"
 #endif
 
 [Setup]
@@ -27,7 +27,7 @@ SetupIconFile={#StageDir}\assets\AppIcon.ico
 UninstallDisplayIcon={app}\assets\AppIcon.ico
 OutputDir={#OutputDir}
 OutputBaseFilename=ClipboardOCR-{#AppVersion}-windows-x64-setup
-VersionInfoVersion=0.2.0.6
+VersionInfoVersion=0.2.0.7
 AppMutex=Local\ClipboardOCR.Windows
 CloseApplications=yes
 RestartApplications=no
@@ -36,11 +36,11 @@ RestartApplications=no
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Complete Clipboard OCR Setup"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\setup.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\AppIcon.ico"
+Name: "{group}\Complete Clipboard OCR Setup"; Filename: "{app}\windows\setup.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\assets\AppIcon.ico"
 Name: "{group}\Uninstall Clipboard OCR"; Filename: "{uninstallexe}"
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\windows\setup.ps1"""; WorkingDir: "{app}"; Description: "Download the GPU runtime and models now (required before first use)"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\windows\setup.cmd"; WorkingDir: "{app}"; Description: "Download and verify the GPU runtime and models now (required before first use)"; Flags: postinstall nowait skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\.windows"
