@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QMenu,
-    QPlainTextEdit, QProgressBar, QPushButton, QSystemTrayIcon,
+    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSystemTrayIcon,
     QVBoxLayout, QWidget,
 )
 
@@ -464,6 +464,14 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def show_startup_notice(self):
+        notice = QMessageBox(QMessageBox.Information, "Clipboard OCR",
+                             "Clipboard OCR 已启动并在系统托盘运行。",
+                             QMessageBox.Ok, self)
+        notice.setInformativeText("复制图片后按 Ctrl+Alt+O 即可识别。")
+        notice.setWindowIcon(self.windowIcon())
+        notice.exec()
+
     def closeEvent(self, event: QCloseEvent):
         if self.closing or not self.runtime:
             event.accept()
@@ -528,9 +536,7 @@ def main():
         QTimer.singleShot(800, lambda: (window.grab().save(str(render_path)), app.quit()))
     elif should_start_hidden(render_path, QSystemTrayIcon.isSystemTrayAvailable()):
         window.hide()
-        QTimer.singleShot(700, lambda: window.tray.showMessage(
-            "Clipboard OCR", "Running in the notification area · Ctrl+Alt+O to recognize",
-            QSystemTrayIcon.Information, 3000))
+        QTimer.singleShot(500, window.show_startup_notice)
     else:
         logger.warning("System tray unavailable; showing the main window")
         window.show()
