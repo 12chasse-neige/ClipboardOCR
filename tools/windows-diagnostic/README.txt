@@ -1,10 +1,10 @@
-Clipboard OCR Windows 简易诊断工具
+Clipboard OCR Windows 简易诊断工具 v2
 
 用途：检查“安装后没有 GUI / 终端窗口 / 模型无法加载 / RTX 5090 不识别”等问题。
 
 使用方法：
 1. 解压这个 ZIP。
-2. 双击 run-diagnostics.cmd。
+2. 双击 run-diagnostics.cmd；诊断窗口会保持打开，不会一闪而过。
 3. 等待脚本完成；它会在当前目录生成 ClipboardOCR-diagnostic-时间.zip。
 4. 把生成的诊断 ZIP 发回即可。
 
