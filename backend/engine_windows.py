@@ -47,6 +47,9 @@ def configure_environment():
 
 def find_llama_server():
     import shutil
+    bundled = ROOT / ".windows/tools/llama/llama-server.exe"
+    if bundled.is_file():
+        return bundled
     found = shutil.which("llama-server")
     if found:
         return Path(found)

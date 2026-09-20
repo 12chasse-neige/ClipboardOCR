@@ -20,3 +20,10 @@ jobs:
       - run: python -m unittest discover -s tests -p "test_*.py" -v
       - run: python -m unittest windows.test_windows -v
       - run: python -m py_compile windows/app.py backend/engine_windows.py windows/download_models.py windows/verify_setup.py
+      - shell: pwsh
+        run: |
+          foreach ($file in 'windows/setup.ps1','windows/build_installer.ps1') {
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$null, [ref]$parseErrors)
+            if ($parseErrors) { $parseErrors | Format-List; exit 1 }
+          }

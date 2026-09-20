@@ -7,11 +7,17 @@ This port keeps the original clipboard-safe workflow and Markdown output, but re
 - Windows 10/11 x64
 - NVIDIA GPU with a current driver. RTX 4060 Laptop (8 GB, compute capability 8.9) is the validated configuration; other GPUs are not yet qualified.
 - About 10 GB free disk space for Python packages, caches, and models
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`) for source installation; the Release installer bundles the required setup tools
 
 The tested machine is an RTX 4060 Laptop GPU with 8 GB VRAM and 32 GB system memory.
 
-## Install
+## Release installer
+
+[Download v0.2.0 Windows Preview 1](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-windows-preview.1). The x64 web installer bundles pinned `uv` and llama.cpp runtimes, but downloads Paddle/CUDA packages and the official model during first setup. Allow about 10 GB free disk space and keep the machine online. The preview is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release.
+
+The installer targets the current user and needs no administrator access. Leave **Download the GPU runtime and models now** selected on its final page. Setup performs a real OCR smoke test before creating the desktop shortcut.
+
+## Install from source
 
 Open PowerShell in the project directory and run:
 

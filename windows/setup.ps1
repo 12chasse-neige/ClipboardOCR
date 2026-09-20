@@ -3,7 +3,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $pythonRoot = Join-Path $root '.windows\python'
 $runtime = Join-Path $root '.windows\runtime'
 $python = Join-Path $runtime 'Scripts\python.exe'
-$uv = (Get-Command uv -ErrorAction Stop).Source
+$bundledUv = Join-Path $root '.windows\tools\uv.exe'
+$uv = if (Test-Path -LiteralPath $bundledUv) { $bundledUv } else { (Get-Command uv -ErrorAction Stop).Source }
 $env:UV_LINK_MODE = 'copy'
 
 if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
@@ -20,7 +21,8 @@ if (-not (Test-Path -LiteralPath $python)) {
 & $uv pip install --python $python 'paddleocr[doc-parser]==3.7.0' 'PySide6==6.9.3' 'Pillow==12.1.0'
 & $uv pip install --python $python 'nvidia-cudnn-cu12==9.9.0.52'
 & $python -c "from PIL import Image; Image.open(r'$root\assets\AppIcon.png').save(r'$root\assets\AppIcon.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])"
-if (-not (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter llama-server.exe -Recurse -ErrorAction SilentlyContinue)) {
+$bundledLlama = Join-Path $root '.windows\tools\llama\llama-server.exe'
+if (-not (Test-Path -LiteralPath $bundledLlama) -and -not (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter llama-server.exe -Recurse -ErrorAction SilentlyContinue)) {
     winget install --id ggml.llamacpp --version b11026 --exact --accept-package-agreements --accept-source-agreements --silent
 }
 & $python (Join-Path $PSScriptRoot 'download_models.py')

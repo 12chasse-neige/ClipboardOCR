@@ -6,13 +6,43 @@
 <p align="center"><strong>Copy an image → press a shortcut → paste Markdown with equations.</strong></p>
 <p align="center">Native macOS and Windows apps · PaddleOCR-VL-1.6 · Fully local inference</p>
 
-Clipboard OCR turns an image on your Mac’s clipboard into editable Markdown. It handles English and Chinese paragraphs, lists, inline mathematics, and display equations through PaddleOCR’s document-parsing pipeline. The result replaces the clipboard automatically, so you can paste straight into a Markdown editor or notes document.
+Clipboard OCR turns a clipboard image into editable Markdown on macOS or Windows. It handles English and Chinese paragraphs, lists, inline mathematics, and display equations through PaddleOCR’s document-parsing pipeline. Recognition runs locally, and the result replaces the clipboard only if its contents have not changed while OCR is running.
 
-This is **v0.1.0, a personal-use macOS app**. There is no result editor, cloud OCR, PDF workspace, or saved recognition history. The bundled app runs natively; a separate local Python worker keeps the models ready between requests.
+## Platform and version status
 
-> **Windows:** this branch also contains a native high-DPI tray app for NVIDIA GPUs. See [WINDOWS.md](WINDOWS.md). It uses PaddlePaddle CUDA for layout and llama.cpp Vulkan for bounded parallel VLM recognition.
+This `feature/Windows` branch contains both platform implementations. It keeps the macOS v0.1.0 source from `main` and adds a separate native Windows port; it is not one cross-platform executable.
 
-## Quick start
+| Platform | Status | Native app | Accelerated inference | Validated configuration |
+|---|---|---|---|---|
+| macOS | **v0.1.0 baseline** | SwiftUI menu-bar app | Apple Silicon / MLX Metal | M4 Pro, 48 GB, macOS 26.6.2 |
+| Windows | **v0.2.0 Windows Preview 1** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
+
+The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. macOS builds an ad-hoc signed `.app`; Windows Preview 1 provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
+
+## Windows quick start
+
+### Download installer
+
+- [Download Clipboard OCR v0.2.0 Windows Preview 1](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-windows-preview.1).
+- Requires Windows 10/11 x64, an NVIDIA GPU with a current driver, about 10 GB free space, and Internet access during first setup.
+- The installer bundles pinned `uv` and llama.cpp tools. It then downloads the larger Paddle/CUDA environment and official model snapshot; it is not a 6 GB offline bundle.
+- The preview installer is not code-signed, so Windows may show an unknown-publisher warning. Verify the SHA-256 published with the Release before running it.
+
+After installation, leave **Download the GPU runtime and models now** selected. When setup reports success, start **Clipboard OCR** from the desktop, copy an image or use `Win+Shift+S`, press `Ctrl+Alt+O`, then paste the generated Markdown.
+
+### Install from source
+
+```powershell
+git clone --branch feature/Windows https://github.com/12chasse-neige/ClipboardOCR.git
+cd ClipboardOCR
+powershell -ExecutionPolicy Bypass -File .\windows\setup.ps1
+```
+
+Source installation additionally requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`). Setup installs the pinned private runtime under `.windows`, performs real end-to-end GPU OCR, and creates **Clipboard OCR** on the desktop. Re-running setup reuses downloaded packages and models.
+
+The Windows preview uses two bounded VLM inference slots, safely handles multi-megabyte clipboard results, retries a crashed llama.cpp service once, bounds very large input images, and writes privacy-safe rotating diagnostics under `%LOCALAPPDATA%\ClipboardOCR\logs`. See [WINDOWS.md](WINDOWS.md) for architecture, measured RTX 4060 latency, limitations and troubleshooting.
+
+## macOS quick start
 
 ### Requirements
 
