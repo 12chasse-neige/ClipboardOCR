@@ -28,11 +28,11 @@ if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
 $env:UV_PYTHON_INSTALL_DIR = $pythonRoot
 New-Item -ItemType Directory -Path $pythonRoot -Force | Out-Null
 Write-Host "Managed Python directory: $pythonRoot"
-& $uv python install 3.12.13
+$uvInstallOutput = cmd.exe /d /c "`"$uv`" python install 3.12.13 2>&1"
 $pythonInstallExit = $LASTEXITCODE
 $basePython = (& $uv python find 3.12.13 --managed-python).Trim()
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $basePython)) {
-    throw "Managed Python 3.12.13 was not installed (uv exit code $pythonInstallExit)."
+    throw "Managed Python 3.12.13 was not installed (uv exit code $pythonInstallExit).`n$($uvInstallOutput -join "`n")"
 }
 $pythonRootPrefix = ([IO.Path]::GetFullPath($pythonRoot)).TrimEnd('\') + '\'
 if (-not ([IO.Path]::GetFullPath($basePython)).StartsWith($pythonRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
