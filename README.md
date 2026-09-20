@@ -28,7 +28,7 @@ The user workflow and Markdown output contract are shared, but installation, sho
 - The installer bundles pinned `uv` and llama.cpp tools. It then downloads the larger Paddle/CUDA environment and official model snapshot; it is not a 6 GB offline bundle.
 - The preview installer is not code-signed, so Windows may show an unknown-publisher warning. Verify the SHA-256 published with the Release before running it.
 
-After installation, leave **Download the GPU runtime and models now** selected. When setup reports success, start **Clipboard OCR** from the desktop. It starts without a console window and stays in the notification area; closing its main window also returns it to the tray. Copy an image or use `Win+Shift+S`, press `Ctrl+Alt+O`, then paste the generated Markdown. Use **Quit** from the tray menu to stop it completely.
+After installation, leave **Download the GPU runtime and models now** selected. When setup reports success, start **Clipboard OCR** from the desktop. It opens the main interface without a console window; once the model is ready, a lower-right notification confirms startup. Closing the main window returns it to the tray. Copy an image or use `Win+Shift+S`, press `Ctrl+Alt+O`, then paste the generated Markdown. Use **Quit** from the tray menu to stop it completely.
 
 ### Install from source
 

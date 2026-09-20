@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QMenu,
-    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSystemTrayIcon,
+    QPlainTextEdit, QProgressBar, QPushButton, QSystemTrayIcon,
     QVBoxLayout, QWidget,
 )
 
@@ -45,11 +45,6 @@ CF_UNICODETEXT, GMEM_MOVEABLE = 13, 0x0002
 WM_HOTKEY, WM_QUIT = 0x0312, 0x0012
 MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, VK_O = 0x0001, 0x0002, 0x4000, 0x4F
 MAX_IMAGE_PIXELS = 12_000_000
-
-
-def should_start_hidden(render_path, tray_available):
-    """Keep the production app in the tray, but preserve render and fallback UI."""
-    return render_path is None and tray_available
 
 user32.GetClipboardSequenceNumber.restype = wintypes.DWORD
 user32.OpenClipboard.argtypes = [wintypes.HWND]
@@ -154,6 +149,35 @@ class Bridge(QObject):
     failure = Signal(str)
 
 
+class ReadyPopup(QWidget):
+    def __init__(self, icon):
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setObjectName("readyPopup")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(18, 14, 22, 14)
+        image = QLabel()
+        image.setPixmap(icon.pixmap(38, 38))
+        layout.addWidget(image)
+        text = QVBoxLayout()
+        text.addWidget(QLabel("Clipboard OCR 已启动", objectName="popupTitle"))
+        text.addWidget(QLabel("模型已就绪 · Ctrl+Alt+O 开始识别", objectName="popupDetail"))
+        layout.addLayout(text)
+        self.setStyleSheet("""
+            QWidget#readyPopup { background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; }
+            QLabel#popupTitle { color:#122033; font:700 14px 'Segoe UI'; }
+            QLabel#popupDetail { color:#66758A; font:12px 'Segoe UI'; }
+        """)
+
+    def show_ready(self):
+        self.adjustSize()
+        area = QApplication.primaryScreen().availableGeometry()
+        self.move(area.right() - self.width() - 22, area.bottom() - self.height() - 22)
+        self.show()
+        self.raise_()
+        QTimer.singleShot(4500, self.close)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, runtime=True):
         super().__init__()
@@ -169,6 +193,7 @@ class MainWindow(QMainWindow):
         self.model_loaded = False
         self.latest_result = ""
         self.closing = False
+        self.startup_notified = False
         self.backend_name = "Detecting GPU backend…"
         self.setWindowTitle("Clipboard OCR")
         self.setWindowIcon(QIcon(str(ROOT / "assets/AppIcon.ico")))
@@ -413,6 +438,10 @@ class MainWindow(QMainWindow):
         self.backend_value.setText(backend)
         self.elapsed_label.setText(f"Ready in {seconds:.1f} s")
         self.set_state("Ready for capture", "Copy an image and press Ctrl+Alt+O. The engine is already warm.", "ready", busy=False)
+        if not self.startup_notified:
+            self.startup_notified = True
+            self.ready_popup = ReadyPopup(self.windowIcon())
+            self.ready_popup.show_ready()
 
     def on_unloaded(self):
         self.model_loaded = False
@@ -463,14 +492,6 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
-
-    def show_startup_notice(self):
-        notice = QMessageBox(QMessageBox.Information, "Clipboard OCR",
-                             "Clipboard OCR 已启动并在系统托盘运行。",
-                             QMessageBox.Ok, self)
-        notice.setInformativeText("复制图片后按 Ctrl+Alt+O 即可识别。")
-        notice.setWindowIcon(self.windowIcon())
-        notice.exec()
 
     def closeEvent(self, event: QCloseEvent):
         if self.closing or not self.runtime:
@@ -534,11 +555,7 @@ def main():
     if render_path:
         window.show()
         QTimer.singleShot(800, lambda: (window.grab().save(str(render_path)), app.quit()))
-    elif should_start_hidden(render_path, QSystemTrayIcon.isSystemTrayAvailable()):
-        window.hide()
-        QTimer.singleShot(500, window.show_startup_notice)
     else:
-        logger.warning("System tray unavailable; showing the main window")
         window.show()
     sys.exit(app.exec())
 

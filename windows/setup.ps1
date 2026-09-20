@@ -31,9 +31,10 @@ if (-not (Test-Path -LiteralPath $bundledLlama) -and -not (Get-ChildItem "$env:L
 $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Clipboard OCR.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut($shortcut)
-$link.TargetPath = Join-Path $runtime 'Scripts\pythonw.exe'
-$link.Arguments = '"' + (Join-Path $PSScriptRoot 'app.py') + '"'
+$link.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
+$link.Arguments = '"' + (Join-Path $PSScriptRoot 'launch_hidden.vbs') + '"'
 $link.WorkingDirectory = $root
 $link.IconLocation = Join-Path $root 'assets\AppIcon.ico'
+$link.WindowStyle = 7
 $link.Save()
 Write-Host "Setup complete: $shortcut"

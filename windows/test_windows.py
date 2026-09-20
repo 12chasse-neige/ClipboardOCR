@@ -59,11 +59,5 @@ class WindowsEngineTests(unittest.TestCase):
         self.assertLessEqual(prepared.width * prepared.height, windows_app.MAX_IMAGE_PIXELS)
         self.assertEqual(prepared.getpixel((0, 0)), (255, 255, 255))
 
-    def test_production_startup_prefers_tray_with_safe_fallback(self):
-        self.assertTrue(windows_app.should_start_hidden(None, True))
-        self.assertFalse(windows_app.should_start_hidden(None, False))
-        self.assertFalse(windows_app.should_start_hidden(Path("render.png"), True))
-
-
 if __name__ == "__main__":
     unittest.main()
