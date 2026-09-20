@@ -51,10 +51,11 @@ Add-Line 'Shortcut and installation roots:'
 if (-not $uniqueRoots) { Add-Line '  NONE FOUND' }
 foreach ($root in $uniqueRoots) {
     Add-Line "  ROOT: $root"
+    $managedPythonRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\python'
+    Add-Line "    Managed Python root: $managedPythonRoot"
     $expected = @(
         'windows\app.py', 'windows\launch.py', 'windows\setup.ps1',
         '.windows\runtime\Scripts\python.exe',
-        '.windows\python\cpython-3.12-windows-x86_64-none\pythonw.exe',
         '.windows\models\PaddleOCR-VL-1.6-GGUF\PaddleOCR-VL-1.6-GGUF.gguf',
         '.windows\models\PaddleOCR-VL-1.6-GGUF\PaddleOCR-VL-1.6-GGUF-mmproj.gguf'
     )
@@ -67,6 +68,12 @@ foreach ($root in $uniqueRoots) {
                 Add-Line "    PASS $relative (directory, $([math]::Round($size/1MB,2)) MiB)"
             } else { Add-Line "    PASS $relative ($([math]::Round($item.Length/1MB,2)) MiB)" }
         } else { Add-Line "    MISSING $relative" }
+    }
+    $managedPython = Get-ChildItem -LiteralPath $managedPythonRoot -Filter pythonw.exe -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($managedPython) {
+        Add-Line "    PASS managed Python $($managedPython.FullName) ($([math]::Round($managedPython.Length/1MB,2)) MiB)"
+    } else {
+        Add-Line "    MISSING managed Python under $managedPythonRoot"
     }
     $layout = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\paddlex\official_models\PP-DocLayoutV3'
     if (Test-Path -LiteralPath $layout) {
@@ -95,6 +102,10 @@ Save-Text 'processes.txt' ($processes -join "`r`n")
 $log = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\logs\app.log'
 if (Test-Path -LiteralPath $log) {
     Get-Content -LiteralPath $log -Tail 150 | ForEach-Object { $_ -replace [regex]::Escape($env:USERNAME), '<user>' } | Set-Content -LiteralPath (Join-Path $reportDir 'app.log.tail.txt') -Encoding UTF8
+}
+$setupLog = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\logs\setup.log'
+if (Test-Path -LiteralPath $setupLog) {
+    Get-Content -LiteralPath $setupLog -Tail 250 | ForEach-Object { $_ -replace [regex]::Escape($env:USERNAME), '<user>' } | Set-Content -LiteralPath (Join-Path $reportDir 'setup.log.tail.txt') -Encoding UTF8
 }
 
 $lines | Set-Content -LiteralPath (Join-Path $reportDir 'summary.txt') -Encoding UTF8

@@ -9,7 +9,12 @@ trap {
     exit 1
 }
 
-$pythonRoot = Join-Path $root '.windows\python'
+# uv creates a minor-version link directory below UV_PYTHON_INSTALL_DIR.  A
+# Steam/library volume can be reported by Windows as an untrusted mount point,
+# which makes that link creation fail before dependencies are installed. Keep
+# the managed interpreter in the user's trusted local profile; the app and its
+# larger runtime/model files can remain in the selected install directory.
+$pythonRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\python'
 $runtime = Join-Path $root '.windows\runtime'
 $python = Join-Path $runtime 'Scripts\python.exe'
 $bundledUv = Join-Path $root '.windows\tools\uv.exe'
@@ -21,12 +26,23 @@ if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
 }
 
 $env:UV_PYTHON_INSTALL_DIR = $pythonRoot
+New-Item -ItemType Directory -Path $pythonRoot -Force | Out-Null
+Write-Host "Managed Python directory: $pythonRoot"
 & $uv python install 3.12.13
-if ($LASTEXITCODE -ne 0) { throw "uv python install failed with exit code $LASTEXITCODE" }
+$pythonInstallExit = $LASTEXITCODE
 $basePython = (& $uv python find 3.12.13 --managed-python).Trim()
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $basePython)) { throw 'Managed Python 3.12.13 was not installed.' }
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $basePython)) {
+    throw "Managed Python 3.12.13 was not installed (uv exit code $pythonInstallExit)."
+}
+$pythonRootPrefix = ([IO.Path]::GetFullPath($pythonRoot)).TrimEnd('\') + '\'
+if (-not ([IO.Path]::GetFullPath($basePython)).StartsWith($pythonRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "uv selected a managed Python outside the expected directory: $basePython"
+}
 $basePythonw = Join-Path (Split-Path -Parent $basePython) 'pythonw.exe'
 if (-not (Test-Path -LiteralPath $basePythonw)) { throw 'Managed GUI Python (pythonw.exe) is missing.' }
+if ($pythonInstallExit -ne 0) {
+    Write-Warning "uv reported exit code $pythonInstallExit after creating a usable managed Python; continuing with the verified interpreter."
+}
 if (-not (Test-Path -LiteralPath $python)) {
     & $uv venv --python $basePython $runtime
     if ($LASTEXITCODE -ne 0) { throw "uv venv failed with exit code $LASTEXITCODE" }

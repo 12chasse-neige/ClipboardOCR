@@ -13,7 +13,7 @@ The tested machine is an RTX 4060 Laptop GPU with 8 GB VRAM and 32 GB system mem
 
 ## Release installer
 
-[Download v0.2.0 Preview 7](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-preview.7). The x64 web installer bundles pinned `uv` and llama.cpp runtimes, but downloads Paddle/CUDA packages and the official model during first setup. Allow about 10 GB free disk space and keep the machine online. The preview is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release. The installer now stops and records `setup.log` when dependencies or models fail, and keeps the failure window open. The installed app opens its main interface through the managed GUI interpreter with no console window. A lower-right notification appears when the model is ready; closing the UI keeps OCR in the tray, while **Quit** in the tray menu exits it.
+[Download v0.2.0 Preview 8](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-preview.8). The x64 web installer bundles pinned `uv` and llama.cpp runtimes, but downloads Paddle/CUDA packages and the official model during first setup. Allow about 10 GB free disk space and keep the machine online. The preview is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release. The installer now stops and records `setup.log` when dependencies or models fail, and keeps the failure window open. The managed Python interpreter is placed in `%LOCALAPPDATA%\ClipboardOCR\python` so Steam/library mount points do not block setup. The installed app opens its main interface through the managed GUI interpreter with no console window. A lower-right notification appears when the model is ready; closing the UI keeps OCR in the tray, while **Quit** in the tray menu exits it.
 
 The installer targets the current user and needs no administrator access. Leave **Download the GPU runtime and models now** selected on its final page. Setup performs a real OCR smoke test before creating the desktop shortcut.
 
@@ -25,7 +25,7 @@ Open PowerShell in the project directory and run:
 powershell -ExecutionPolicy Bypass -File .\windows\setup.ps1
 ```
 
-Setup installs a self-contained Python 3.12 runtime under `.windows` (not an external uv interpreter), pinned application dependencies, llama.cpp, and a revision-pinned official PaddleOCR-VL GGUF model. Reruns reuse the environment and download cache instead of deleting them. The final check performs real end-to-end GPU OCR and creates `Clipboard OCR.lnk` on the desktop.
+Setup installs a self-contained Python 3.12 runtime under `%LOCALAPPDATA%\ClipboardOCR\python` (not an external uv interpreter), while the application runtime and models stay in `.windows`. Keeping the managed interpreter in the user profile avoids Windows mount-point restrictions on Steam/library folders. Setup also installs pinned application dependencies, llama.cpp, and a revision-pinned official PaddleOCR-VL GGUF model. Reruns reuse the environment and download cache instead of deleting them. The final check performs real end-to-end GPU OCR and creates `Clipboard OCR.lnk` on the desktop.
 
 ## Use
 

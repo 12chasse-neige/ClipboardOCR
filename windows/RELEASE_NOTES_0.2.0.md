@@ -1,6 +1,6 @@
-# Clipboard OCR v0.2.0 Preview 7
+# Clipboard OCR v0.2.0 Preview 8
 
-Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup.
+Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup. The managed Python interpreter is installed under `%LOCALAPPDATA%\ClipboardOCR\python`, avoiding the untrusted-mount-point failure seen when the app is extracted under `D:\Steam\test`.
 
 ## Validated configuration
 

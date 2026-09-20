@@ -1,4 +1,4 @@
-param([string]$Version = '0.2.0-preview.7')
+param([string]$Version = '0.2.0-preview.8')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -17,7 +17,9 @@ $iscc = @(
 if (-not $iscc) { throw 'Inno Setup 6 is required: winget install --id JRSoftware.InnoSetup --exact' }
 if (-not (Test-Path -LiteralPath $builderPython)) { throw 'Set CLIPBOARD_OCR_BUILDER_PYTHON to a Python environment with Pillow.' }
 $uvVersion = (& $uv --version) -join "`n"
-$llamaVersion = (& $llama.FullName --version 2>&1) -join "`n"
+# llama-server writes its version to stderr on Windows; run through cmd so
+# PowerShell's Stop policy does not treat that normal output as a build error.
+$llamaVersion = (cmd.exe /d /c "`"$($llama.FullName)`" --version 2>&1") -join "`n"
 if ($uvVersion -notmatch '^uv 0\.11\.19 ') { throw "Expected uv 0.11.19, found: $uvVersion" }
 if ($llamaVersion -notmatch 'build 11026, commit b49650adb') { throw "Expected llama.cpp b11026/b49650adb, found: $llamaVersion" }
 
