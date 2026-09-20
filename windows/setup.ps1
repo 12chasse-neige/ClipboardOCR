@@ -45,9 +45,36 @@ if (-not (Test-Path -LiteralPath $basePythonw)) { throw 'Managed GUI Python (pyt
 if ($pythonInstallExit -ne 0) {
     Write-Warning "uv reported exit code $pythonInstallExit after creating a usable managed Python; continuing with the verified interpreter."
 }
-if (-not (Test-Path -LiteralPath $python)) {
-    & $uv venv --python $basePython $runtime
-    if ($LASTEXITCODE -ne 0) { throw "uv venv failed with exit code $LASTEXITCODE" }
+# A previous interrupted or older run can leave a `uv venv` trampoline behind:
+# its python.exe resolves a recorded base interpreter at start-up and dies with
+# "uv trampoline failed to spawn Python child process" once that path is gone or
+# the tree enforces Redirection Guard.  Treat an environment that cannot import
+# at all as absent so the rebuild below repairs it instead of reusing it.
+$runtimeReady = $false
+if (Test-Path -LiteralPath $python) {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $python -c "import sys" *> $null
+    $runtimeReady = $LASTEXITCODE -eq 0
+    $ErrorActionPreference = $previousPreference
+    if (-not $runtimeReady) {
+        Write-Warning 'The existing virtual environment cannot start; rebuilding it.'
+        Remove-Item -LiteralPath $runtime -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+if (-not $runtimeReady) {
+    # Build the environment with the standard library instead of `uv venv`.
+    # uv writes a trampoline python.exe that resolves its base interpreter at
+    # start-up through uv's junction layout (<pythonRoot>\cpython-3.12-windows-
+    # x86_64-none -> cpython-3.12.13-...).  A process tree that runs with
+    # Redirection Guard (EnforceRedirectionTrust, inherited by every child) may
+    # not traverse a junction created by a non-elevated process, so uv fails with
+    # ERROR_UNTRUSTED_MOUNT_POINT (os error 448) while creating the link
+    # directory and again while inspecting the finished environment.  The
+    # standard library creates a plain, relocatable environment with copied
+    # executables, and `uv pip install` fills it normally even under that policy.
+    & $basePython -m venv --without-pip $runtime
+    if ($LASTEXITCODE -ne 0) { throw "python -m venv failed with exit code $LASTEXITCODE" }
 }
 & $uv pip install --python $python --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/ 'paddlepaddle-gpu==3.2.1'
 if ($LASTEXITCODE -ne 0) { throw "PaddlePaddle GPU installation failed with exit code $LASTEXITCODE" }

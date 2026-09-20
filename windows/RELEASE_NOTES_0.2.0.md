@@ -2,6 +2,8 @@
 
 Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup. The managed Python interpreter, virtual environment and models are installed under `%LOCALAPPDATA%\ClipboardOCR`, avoiding untrusted-mount-point failures when the app is extracted under `D:\Steam\test` or another library volume.
 
+Setup now builds the virtual environment with the standard library instead of `uv venv`. uv's managed Python install keeps a junction to the real interpreter and its virtual environments use trampoline executables, and a process tree that enables Redirection Guard (`EnforceRedirectionTrust`, inherited by children) cannot traverse those reparse points, which previously aborted setup with `ERROR_UNTRUSTED_MOUNT_POINT` (os error 448). Nothing in the install path depends on those links any more, so setup also completes when the installer is started from such a tree.
+
 ## Validated configuration
 
 - Windows 11 Home x64, build 26200
@@ -24,6 +26,9 @@ Updated downloadable Windows installer built from `feature/Windows`. This is a *
 - Idempotent source/runtime setup and revision-pinned GGUF model download
 - Setup now stops on dependency/model/GPU verification failures and writes `setup.log` instead of creating a broken shortcut
 - Setup failures keep a visible diagnostic window open instead of closing immediately
+- Setup creates the runtime with `python -m venv` and rebuilds a leftover environment that cannot start, instead of reusing it
+- Uninstalling or upgrading no longer removes `%LOCALAPPDATA%\ClipboardOCR\runtime` and `\models`, so a reinstall reuses the downloaded runtime and model instead of fetching them again
+- The diagnostic bundle reports the Redirection Guard state and runs a junction traversal probe
 - Conservative VRAM-based selection of one to four inference slots, with an explicit environment override
 
 ## Verification

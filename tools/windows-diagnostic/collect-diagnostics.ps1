@@ -21,6 +21,65 @@ Add-Line "PowerShell: $($PSVersionTable.PSVersion)"
 Add-Line "LOCALAPPDATA: $env:LOCALAPPDATA"
 Add-Line ''
 
+# Redirection Guard (EnforceRedirectionTrust) is inherited by every child process
+# and then blocks traversal of junctions and symlinks that were created by a
+# non-elevated process.  uv's managed-python layout and its `uv venv` trampoline
+# executables rely on exactly such reparse points, so a tree that carries this
+# policy used to fail setup with ERROR_UNTRUSTED_MOUNT_POINT (os error 448) while
+# creating the minor-version link directory and again while inspecting the
+# finished environment.  Record both the policy state and a live traversal probe
+# so that class of failure is identifiable from a diagnostic bundle alone.
+try {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class ClipboardOcrMitigation {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RedirectionTrust { public uint Flags; }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetProcessMitigationPolicy(IntPtr process, int policy, ref RedirectionTrust buffer, IntPtr size);
+    [DllImport("kernel32.dll")]
+    static extern IntPtr GetCurrentProcess();
+    // ProcessRedirectionTrustPolicy == 16; bit 0 == EnforceRedirectionTrust.
+    public static int EnforceRedirectionTrust() {
+        RedirectionTrust value = new RedirectionTrust();
+        if (!GetProcessMitigationPolicy(GetCurrentProcess(), 16, ref value, (IntPtr)4)) { return -1; }
+        return (int)(value.Flags & 1);
+    }
+}
+'@ -ErrorAction Stop
+    $enforced = [ClipboardOcrMitigation]::EnforceRedirectionTrust()
+    if ($enforced -eq 1) {
+        Add-Line 'Redirection Guard: ENFORCED (junction/symlink traversal can fail with os error 448)'
+    } elseif ($enforced -eq 0) {
+        Add-Line 'Redirection Guard: not enforced'
+    } else {
+        Add-Line 'Redirection Guard: state unavailable'
+    }
+} catch {
+    Add-Line "Redirection Guard: query failed ($($_.Exception.Message))"
+}
+
+$probeRoot = Join-Path $env:TEMP "ClipboardOCR-junction-probe-$stamp"
+try {
+    $probeTarget = Join-Path $probeRoot 'target'
+    $probeLink = Join-Path $probeRoot 'link'
+    New-Item -ItemType Directory -Path $probeTarget -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $probeTarget 'probe.txt') -Value 'ok' -Encoding ASCII
+    New-Item -ItemType Junction -Path $probeLink -Target $probeTarget -ErrorAction Stop | Out-Null
+    try {
+        $probeValue = (Get-Content -LiteralPath (Join-Path $probeLink 'probe.txt') -Raw -ErrorAction Stop).Trim()
+        Add-Line "Junction traversal: PASS (read through junction: $probeValue)"
+    } catch {
+        Add-Line "Junction traversal: FAIL -> $($_.Exception.Message)"
+    }
+} catch {
+    Add-Line "Junction traversal: SKIPPED -> $($_.Exception.Message)"
+} finally {
+    Remove-Item -LiteralPath $probeRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+Add-Line ''
+
 $shortcutText = [System.Collections.Generic.List[string]]::new()
 $roots = [System.Collections.Generic.List[string]]::new()
 $shell = New-Object -ComObject WScript.Shell

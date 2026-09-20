@@ -44,8 +44,12 @@ Filename: "{app}\windows\setup.cmd"; WorkingDir: "{app}"; Description: "Download
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\.windows"
-Type: filesandordirs; Name: "{localappdata}\ClipboardOCR\runtime"
-Type: filesandordirs; Name: "{localappdata}\ClipboardOCR\models"
 Type: files; Name: "{userdesktop}\Clipboard OCR.lnk"
 Type: filesandordirs; Name: "{app}\backend\__pycache__"
 Type: filesandordirs; Name: "{app}\windows\__pycache__"
+; {localappdata}\ClipboardOCR\runtime and \models are deliberately NOT removed
+; here.  Setup reuses them, so deleting them made every upgrade and every
+; reinstall download the whole ~6 GB GPU runtime and model snapshot again, and an
+; uninstall that ran as part of an upgrade could destroy a working installation's
+; data before the new setup had a chance to reuse it.  To wipe the download cache
+; completely, delete %LOCALAPPDATA%\ClipboardOCR by hand.
