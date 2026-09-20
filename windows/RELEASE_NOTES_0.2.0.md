@@ -1,4 +1,4 @@
-# Clipboard OCR v0.2.0 Preview 11
+# Clipboard OCR v0.2.0 Preview 12
 
 Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup. The managed Python interpreter, virtual environment and models are installed under `%LOCALAPPDATA%\ClipboardOCR`, avoiding untrusted-mount-point failures when the app is extracted under `D:\Steam\test` or another library volume.
 
@@ -27,6 +27,7 @@ Setup now builds the virtual environment with the standard library instead of `u
 - Setup now stops on dependency/model/GPU verification failures and writes `setup.log` instead of creating a broken shortcut
 - Setup failures keep a visible diagnostic window open instead of closing immediately
 - Setup creates the runtime with `python -m venv` and rebuilds a leftover environment that cannot start, instead of reusing it
+- Setup benchmarks the official package index against the Tsinghua and Tencent mirrors and uses the fastest one, and falls back to the Hugging Face mirror when `huggingface.co` is unreachable
 - Setup runs the model download and the GPU verification as redirected child processes, so Windows PowerShell 5.1 can no longer abort setup with "Index was outside the bounds of the array" while decoding their Unicode progress output
 - Uninstalling or upgrading no longer removes `%LOCALAPPDATA%\ClipboardOCR\runtime` and `\models`, so a reinstall reuses the downloaded runtime and model instead of fetching them again
 - The diagnostic bundle reports the Redirection Guard state and runs a junction traversal probe

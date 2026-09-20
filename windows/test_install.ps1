@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1
 Uses the newest dist\ClipboardOCR-*-setup.exe into C:\ClipboardOCR-install-test.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1 -Installer .\dist\ClipboardOCR-0.2.0-preview.11-windows-x64-setup.exe -TestDir D:\ClipboardOCR-test -KeepInstall
+powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1 -Installer .\dist\ClipboardOCR-0.2.0-preview.12-windows-x64-setup.exe -TestDir D:\ClipboardOCR-test -KeepInstall
 #>
 [CmdletBinding()]
 param(

@@ -23,6 +23,63 @@ $bundledUv = Join-Path $root '.windows\tools\uv.exe'
 $uv = if (Test-Path -LiteralPath $bundledUv) { $bundledUv } else { (Get-Command uv -ErrorAction Stop).Source }
 $env:UV_LINK_MODE = 'copy'
 
+# The official package index is unusable over some consumer links (measured at
+# ~0.01 MB/s, i.e. hours for the ~1.5 GB of wheels) while domestic mirrors serve
+# the same files at ~5 MB/s.  Measure a small ranged download from every
+# candidate and keep the fastest, then fall back to the official index for
+# anything a mirror does not carry.  CLIPBOARD_OCR_PYPI_INDEX forces one index,
+# CLIPBOARD_OCR_DISABLE_MIRROR=1 stays on the official index.
+$pypiProbe = '/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl'
+$pypiCandidates = @(
+    [pscustomobject]@{ Name = 'PyPI'; Index = 'https://pypi.org/simple'; Files = 'https://files.pythonhosted.org' },
+    [pscustomobject]@{ Name = 'Tsinghua TUNA'; Index = 'https://pypi.tuna.tsinghua.edu.cn/simple'; Files = 'https://pypi.tuna.tsinghua.edu.cn' },
+    [pscustomobject]@{ Name = 'Tencent Cloud'; Index = 'https://mirrors.cloud.tencent.com/pypi/simple'; Files = 'https://mirrors.cloud.tencent.com/pypi' }
+)
+
+function Measure-Throughput([string]$url) {
+    # Throughput of a 4 MiB ranged download in MB/s, or -1 when it fails.
+    # curl.exe ships with Windows 10 1803+; it is the only client here that
+    # honours a range request reliably from Windows PowerShell 5.1, and it uses
+    # the same HTTPS_PROXY environment variable as uv does.
+    if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) { return -1 }
+    $probe = 'curl.exe -sS -o NUL -w "%{time_total} %{size_download}" --max-time 15 -L -r 0-4194303 "' + $url + '" 2>NUL'
+    $output = cmd.exe /d /c $probe
+    $parts = @("$output" -split '\s+' | Where-Object { $_ })
+    if ($parts.Count -lt 2) { return -1 }
+    $seconds = 0.0
+    $bytes = 0.0
+    if (-not [double]::TryParse($parts[0], [ref]$seconds)) { return -1 }
+    if (-not [double]::TryParse($parts[1], [ref]$bytes)) { return -1 }
+    if ($seconds -le 0 -or $bytes -le 0) { return -1 }
+    return [math]::Round($bytes / 1MB / $seconds, 2)
+}
+
+$pypiIndex = 'https://pypi.org/simple'
+if ($env:CLIPBOARD_OCR_PYPI_INDEX) {
+    $pypiIndex = $env:CLIPBOARD_OCR_PYPI_INDEX
+    Write-Host "Package index forced by CLIPBOARD_OCR_PYPI_INDEX: $pypiIndex"
+} elseif ($env:CLIPBOARD_OCR_DISABLE_MIRROR -ne '1') {
+    $bestSpeed = -1
+    $bestName = 'PyPI'
+    foreach ($candidate in $pypiCandidates) {
+        $speed = Measure-Throughput ($candidate.Files + $pypiProbe)
+        Write-Host ("Package index probe {0,-14} {1,7:N2} MB/s" -f $candidate.Name, $speed)
+        if ($speed -gt $bestSpeed) { $bestSpeed = $speed; $pypiIndex = $candidate.Index; $bestName = $candidate.Name }
+    }
+    if ($bestSpeed -le 0) {
+        $pypiIndex = 'https://pypi.org/simple'
+        Write-Warning 'No package index answered the speed probe; falling back to PyPI.'
+    } else {
+        Write-Host "Package index selected: $bestName ($pypiIndex)"
+        if ($bestSpeed -lt 0.1) {
+            Write-Warning "Every package index answered below 0.1 MB/s. Check the network and any HTTPS_PROXY setting; setup will be extremely slow otherwise."
+        }
+    }
+}
+$pypiFallback = @()
+if ($pypiIndex -ne 'https://pypi.org/simple') { $pypiFallback = @('--extra-index-url', 'https://pypi.org/simple') }
+
+
 # Windows PowerShell 5.1 decodes native command output with the console code page
 # and aborts with "Index was outside the bounds of the array" when a child process
 # writes characters that code page cannot represent.  huggingface_hub and its Xet
@@ -104,9 +161,9 @@ if (-not $runtimeReady) {
 }
 & $uv pip install --python $python --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/ 'paddlepaddle-gpu==3.2.1'
 if ($LASTEXITCODE -ne 0) { throw "PaddlePaddle GPU installation failed with exit code $LASTEXITCODE" }
-& $uv pip install --python $python 'paddleocr[doc-parser]==3.7.0' 'PySide6==6.9.3' 'Pillow==12.1.0'
+& $uv pip install --python $python --index-url $pypiIndex @pypiFallback 'paddleocr[doc-parser]==3.7.0' 'PySide6==6.9.3' 'Pillow==12.1.0'
 if ($LASTEXITCODE -ne 0) { throw "PaddleOCR/PySide6/Pillow installation failed with exit code $LASTEXITCODE" }
-& $uv pip install --python $python 'nvidia-cudnn-cu12==9.9.0.52'
+& $uv pip install --python $python --index-url $pypiIndex @pypiFallback 'nvidia-cudnn-cu12==9.9.0.52'
 if ($LASTEXITCODE -ne 0) { throw "cuDNN installation failed with exit code $LASTEXITCODE" }
 & $python -c "from PIL import Image; Image.open(r'$root\assets\AppIcon.png').save(r'$root\assets\AppIcon.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])"
 if ($LASTEXITCODE -ne 0) { throw "Icon preparation failed with exit code $LASTEXITCODE" }
