@@ -23,6 +23,32 @@ $bundledUv = Join-Path $root '.windows\tools\uv.exe'
 $uv = if (Test-Path -LiteralPath $bundledUv) { $bundledUv } else { (Get-Command uv -ErrorAction Stop).Source }
 $env:UV_LINK_MODE = 'copy'
 
+# Windows PowerShell 5.1 decodes native command output with the console code page
+# and aborts with "Index was outside the bounds of the array" when a child process
+# writes characters that code page cannot represent.  huggingface_hub and its Xet
+# backend draw Unicode progress bars, and that crash killed setup right after the
+# model download on a non-UTF-8 console.  The Python steps below therefore write
+# straight to files that are read back with an explicit encoding, and the progress
+# bars are switched off on top of that.
+$env:PYTHONIOENCODING = 'utf-8'
+$env:HF_HUB_DISABLE_PROGRESS_BARS = '1'
+$env:TQDM_DISABLE = '1'
+
+function Invoke-PythonStep([string]$name) {
+    $stdout = Join-Path $logDir "$name.out.log"
+    $stderr = Join-Path $logDir "$name.err.log"
+    $process = Start-Process -FilePath $python `
+        -ArgumentList @("`"$(Join-Path $PSScriptRoot "$name.py")`"") `
+        -Wait -NoNewWindow -PassThru `
+        -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    foreach ($file in @($stdout, $stderr)) {
+        if ((Test-Path -LiteralPath $file) -and (Get-Item -LiteralPath $file).Length -gt 0) {
+            Get-Content -LiteralPath $file -Encoding UTF8 | ForEach-Object { Write-Host $_ }
+        }
+    }
+    return $process.ExitCode
+}
+
 if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
     throw 'An NVIDIA GPU and current NVIDIA driver are required.'
 }
@@ -99,10 +125,10 @@ $installedLlama = if (Test-Path -LiteralPath $wingetPackages) {
 if (-not (Test-Path -LiteralPath $bundledLlama) -and -not $installedLlama) {
     throw 'llama-server.exe is missing after installation.'
 }
-& $python (Join-Path $PSScriptRoot 'download_models.py')
-if ($LASTEXITCODE -ne 0) { throw "OCR model download failed with exit code $LASTEXITCODE" }
-& $python (Join-Path $PSScriptRoot 'verify_setup.py')
-if ($LASTEXITCODE -ne 0) { throw "GPU OCR verification failed with exit code $LASTEXITCODE" }
+$modelExit = Invoke-PythonStep 'download_models'
+if ($modelExit -ne 0) { throw "OCR model download failed with exit code $modelExit" }
+$verifyExit = Invoke-PythonStep 'verify_setup'
+if ($verifyExit -ne 0) { throw "GPU OCR verification failed with exit code $verifyExit" }
 
 $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Clipboard OCR.lnk'
 $shell = New-Object -ComObject WScript.Shell
