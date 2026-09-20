@@ -14,6 +14,7 @@ if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
 $env:UV_PYTHON_INSTALL_DIR = $pythonRoot
 & $uv python install 3.12.13
 $basePython = (& $uv python find 3.12.13 --managed-python).Trim()
+$basePythonw = Join-Path (Split-Path -Parent $basePython) 'pythonw.exe'
 if (-not (Test-Path -LiteralPath $python)) {
     & $uv venv --python $basePython $runtime
 }
@@ -31,9 +32,10 @@ if (-not (Test-Path -LiteralPath $bundledLlama) -and -not (Get-ChildItem "$env:L
 $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Clipboard OCR.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $link = $shell.CreateShortcut($shortcut)
-$link.TargetPath = Join-Path $runtime 'Scripts\pythonw.exe'
-$link.Arguments = '"' + (Join-Path $PSScriptRoot 'app.py') + '"'
+$link.TargetPath = $basePythonw
+$link.Arguments = '"' + (Join-Path $PSScriptRoot 'launch.py') + '"'
 $link.WorkingDirectory = $root
 $link.IconLocation = Join-Path $root 'assets\AppIcon.ico'
+$link.WindowStyle = 1
 $link.Save()
 Write-Host "Setup complete: $shortcut"

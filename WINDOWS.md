@@ -13,7 +13,7 @@ The tested machine is an RTX 4060 Laptop GPU with 8 GB VRAM and 32 GB system mem
 
 ## Release installer
 
-[Download v0.2.0 Windows Preview 3](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-windows-preview.3). The x64 web installer bundles pinned `uv` and llama.cpp runtimes, but downloads Paddle/CUDA packages and the official model during first setup. Allow about 10 GB free disk space and keep the machine online. The preview is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release. The installed app launches silently into the notification area without a console window; closing its window keeps OCR available, while **Quit** in the tray menu exits it.
+[Download v0.2.0 Preview 5](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-preview.5). The x64 web installer bundles pinned `uv` and llama.cpp runtimes, but downloads Paddle/CUDA packages and the official model during first setup. Allow about 10 GB free disk space and keep the machine online. The preview is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release. The installed app opens its main interface through the managed GUI interpreter with no console window. A lower-right notification appears when the model is ready; closing the UI keeps OCR in the tray, while **Quit** in the tray menu exits it.
 
 The installer targets the current user and needs no administrator access. Leave **Download the GPU runtime and models now** selected on its final page. Setup performs a real OCR smoke test before creating the desktop shortcut.
 

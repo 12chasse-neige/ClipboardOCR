@@ -1,4 +1,4 @@
-param([string]$Version = '0.2.0-preview.3')
+param([string]$Version = '0.2.0-preview.5')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -30,7 +30,7 @@ New-Item -ItemType Directory -Path $stage,$dist,"$stage\backend","$stage\windows
 $files = @(
     'README.md', 'WINDOWS.md',
     'backend\engine.py', 'backend\engine_windows.py',
-    'windows\app.py', 'windows\download_models.py', 'windows\setup.ps1', 'windows\verify_setup.py',
+    'windows\app.py', 'windows\download_models.py', 'windows\launch.py', 'windows\setup.ps1', 'windows\verify_setup.py',
     'assets\AppIcon.png', 'validation\example-1.png'
 )
 foreach ($file in $files) {
