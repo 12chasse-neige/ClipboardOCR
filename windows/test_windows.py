@@ -42,8 +42,15 @@ class WindowsEngineTests(unittest.TestCase):
             self.assertFalse(windows_app.kernel32.GlobalFree(handle))
 
     def test_invalid_concurrency_uses_default(self):
-        with patch.dict(engine_windows.os.environ, {"BAD_INT": "not-a-number"}):
-            self.assertEqual(engine_windows.bounded_int("BAD_INT", 2, 1, 4), 2)
+        self.assertEqual(engine_windows.bounded_int("not-a-number", 2, 1, 4), 2)
+
+    def test_concurrency_scales_conservatively_with_vram(self):
+        self.assertEqual(engine_windows.choose_concurrency(4096), 1)
+        self.assertEqual(engine_windows.choose_concurrency(8188), 2)
+        self.assertEqual(engine_windows.choose_concurrency(12282), 3)
+        self.assertEqual(engine_windows.choose_concurrency(16376), 4)
+        self.assertEqual(engine_windows.choose_concurrency(4096, "4"), 4)
+        self.assertEqual(engine_windows.choose_concurrency(16376, "invalid"), 1)
 
     def test_large_transparent_image_is_bounded_rgb(self):
         image = windows_app.Image.new("RGBA", (5000, 3000), (0, 0, 0, 0))

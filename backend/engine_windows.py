@@ -22,14 +22,34 @@ LAYOUT = LOCAL / "paddlex/official_models/PP-DocLayoutV3"
 GGUF = ROOT / ".windows/models/PaddleOCR-VL-1.6-GGUF"
 
 
-def bounded_int(name, default, minimum, maximum):
+def bounded_int(value, default, minimum, maximum):
     try:
-        return max(minimum, min(maximum, int(os.environ.get(name, default))))
-    except ValueError:
+        return max(minimum, min(maximum, int(value)))
+    except (TypeError, ValueError):
         return default
 
 
-VLM_CONCURRENCY = bounded_int("CLIPBOARD_OCR_CONCURRENCY", 2, 1, 4)
+def choose_concurrency(memory_mib, override=None):
+    if override is not None:
+        return bounded_int(override, 1, 1, 4)
+    if memory_mib >= 15000:
+        return 4
+    if memory_mib >= 11000:
+        return 3
+    return 2 if memory_mib >= 7000 else 1
+
+
+def gpu_profile():
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        result = subprocess.run([
+            "nvidia-smi", "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits", "--id=0",
+        ], capture_output=True, text=True, check=True, timeout=5, creationflags=flags)
+        name, memory = result.stdout.strip().splitlines()[0].rsplit(",", 1)
+        return name.strip(), int(memory.strip())
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return "NVIDIA GPU", 0
 
 
 def configure_environment():
@@ -62,6 +82,10 @@ class Engine:
         self.pipeline = None
         self.service = None
         self.backend_name = "PaddlePaddle CUDA"
+        self.gpu_name, self.gpu_memory_mib = gpu_profile()
+        self.concurrency = choose_concurrency(
+            self.gpu_memory_mib, os.environ.get("CLIPBOARD_OCR_CONCURRENCY")
+        )
         atexit.register(self.close)
 
     def _start_llama(self):
@@ -78,7 +102,7 @@ class Engine:
         self.service = subprocess.Popen([
             str(executable), "-m", str(model), "--mmproj", str(mmproj),
             "--host", "127.0.0.1", "--port", str(port), "--temp", "0",
-            "--ctx-size", "8192", "--parallel", str(VLM_CONCURRENCY), "--n-gpu-layers", "99",
+            "--ctx-size", "8192", "--parallel", str(self.concurrency), "--n-gpu-layers", "99",
             "--api-key", token, "--no-ui", "--log-disable",
         ], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
            stderr=subprocess.DEVNULL, creationflags=flags)
@@ -91,7 +115,7 @@ class Engine:
                 request = urllib.request.Request(url + "/v1/models", headers={"Authorization": "Bearer " + token})
                 with urllib.request.urlopen(request, timeout=1) as response:
                     model_id = json.load(response)["data"][0]["id"]
-                self.backend_name = f"llama.cpp Vulkan · RTX 4060 · {VLM_CONCURRENCY} 路并行"
+                self.backend_name = f"llama.cpp Vulkan · {self.gpu_name} · {self.concurrency} 路并行"
                 return url + "/v1", token, model_id
             except Exception:
                 time.sleep(.2)
@@ -119,7 +143,7 @@ class Engine:
                 self.pipeline = PaddleOCRVL(
                     **common, vl_rec_backend="llama-cpp-server",
                     vl_rec_server_url=url, vl_rec_api_model_name=model_id,
-                    vl_rec_api_key=token, vl_rec_max_concurrency=VLM_CONCURRENCY,
+                    vl_rec_api_key=token, vl_rec_max_concurrency=self.concurrency,
                 )
             else:
                 self.pipeline = PaddleOCRVL(**common, engine="paddle")

@@ -1,6 +1,6 @@
-# Clipboard OCR v0.2.0 Windows Preview 1
+# Clipboard OCR v0.2.0 Windows Preview 2
 
-First downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup.
+Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup.
 
 ## Validated configuration
 
@@ -8,7 +8,7 @@ First downloadable Windows installer built from `feature/Windows`. This is a **w
 - NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB VRAM
 - PaddlePaddle GPU 3.2.1 / CUDA 12.6 / cuDNN 9.9.0.52
 - PaddleOCR 3.7.0 / PaddleOCR-VL 1.6
-- llama.cpp b11026, two Vulkan inference slots
+- llama.cpp b11026, two automatically selected Vulkan inference slots
 
 ## Included
 
@@ -19,13 +19,15 @@ First downloadable Windows installer built from `feature/Windows`. This is a **w
 - Automatic one-time recovery when the llama.cpp service crashes
 - Rotating local diagnostics that do not record images or recognized text
 - Idempotent source/runtime setup and revision-pinned GGUF model download
+- Conservative VRAM-based selection of one to four inference slots, with an explicit environment override
 
 ## Verification
 
-- 6 existing cross-platform Python tests and 4 Windows regression tests passed in GitHub Actions
+- 6 existing cross-platform Python tests and 5 Windows regression tests passed in GitHub Actions
 - End-to-end fixture OCR returned 443 characters consistently
 - Forced llama.cpp termination recovered successfully and left zero child processes after exit
 - Warm RTX 4060 fixture latency measured about 0.8-0.9 seconds; this is not a general latency guarantee
+- 4/8/12/16 GB slot-selection policy is regression-tested; only the 8 GB tier has real-GPU performance evidence
 
 ## Important
 

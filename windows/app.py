@@ -180,7 +180,7 @@ class MainWindow(QMainWindow):
             self.commands.put(("load", None, None))
         else:
             self.model_loaded = True
-            self.backend_value.setText("llama.cpp Vulkan · RTX 4060")
+            self.backend_value.setText("llama.cpp Vulkan · NVIDIA GPU · 自动调优")
             self.elapsed_label.setText("Engine warm")
             self.set_state("Ready for capture", "Copy an image and press Ctrl+Alt+O. The engine is already warm.", "ready", busy=False)
 
@@ -334,7 +334,7 @@ class MainWindow(QMainWindow):
             path = Path(name)
             image.save(path, "PNG", compress_level=1)
             self.elapsed_label.setText("")
-            self.set_state("Recognizing document", "Detecting layout, text, equations and reading order on the RTX 4060.", busy=True)
+            self.set_state("Recognizing document", "Detecting layout, text, equations and reading order on the NVIDIA GPU.", busy=True)
             self.commands.put(("recognize", path, sequence))
         except Exception as error:
             if path:
