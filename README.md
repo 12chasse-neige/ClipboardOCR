@@ -4,11 +4,13 @@
 
 <h1 align="center">Clipboard OCR</h1>
 <p align="center"><strong>Copy an image → press a shortcut → paste Markdown with equations.</strong></p>
-<p align="center">SwiftUI menu-bar app · Apple Silicon · PaddleOCR-VL-1.6 · Local MLX inference</p>
+<p align="center">Native macOS and Windows apps · PaddleOCR-VL-1.6 · Fully local inference</p>
 
 Clipboard OCR turns an image on your Mac’s clipboard into editable Markdown. It handles English and Chinese paragraphs, lists, inline mathematics, and display equations through PaddleOCR’s document-parsing pipeline. The result replaces the clipboard automatically, so you can paste straight into a Markdown editor or notes document.
 
 This is **v0.1.0, a personal-use macOS app**. There is no result editor, cloud OCR, PDF workspace, or saved recognition history. The bundled app runs natively; a separate local Python worker keeps the models ready between requests.
+
+> **Windows:** this branch also contains a native high-DPI tray app for NVIDIA GPUs. See [WINDOWS.md](WINDOWS.md). It uses PaddlePaddle CUDA for layout and llama.cpp Vulkan for bounded parallel VLM recognition.
 
 ## Quick start
 

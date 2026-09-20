@@ -4,8 +4,10 @@ dist/
 __pycache__/
 *.pyc
 .venv*/
+.windows/
 .env
 *.log
+assets/AppIcon.ico
 validation/*.aux
 validation/examples.pdf
 validation/blocks.json
