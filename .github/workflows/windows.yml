@@ -1,0 +1,29 @@
+name: Windows checks
+
+on:
+  push:
+    branches: [feature/Windows]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install Pillow==12.1.0 PySide6==6.9.3
+      - run: python -m unittest discover -s tests -p "test_*.py" -v
+      - run: python -m unittest windows.test_windows -v
+      - run: python -m py_compile windows/app.py backend/engine_windows.py windows/download_models.py windows/verify_setup.py
+      - shell: pwsh
+        run: |
+          foreach ($file in 'windows/setup.ps1','windows/build_installer.ps1') {
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$null, [ref]$parseErrors)
+            if ($parseErrors) { $parseErrors | Format-List; exit 1 }
+          }
