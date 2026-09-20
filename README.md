@@ -75,6 +75,7 @@ The images below are **synthetic, source-controlled test pages**, not private cl
 
 **Recorded output:**
 
+```markdown
 ## Energy and linear algebra
 
 1. Let  $x_{i} = \alpha_{i} + \beta_{i}^{2}$ for i = 1, 2, 3. The total energy is
@@ -92,6 +93,7 @@ $$
 - Preserve subscripts  $a_{ij}$ and the symbol  $\overline{h}$.
 
 - The fraction is  $\frac{a+b}{c+d}$, with  $c+d \neq 0$.
+```
 
 [View the exact Markdown source](validation/example-1.actual.md).
 
@@ -105,6 +107,7 @@ $$
 
 **Recorded output:**
 
+```markdown
 ## 数学与物理：基本关系
 
 1. 设  $x_{i} = \alpha_{i} + \beta_{i}^{2}$，其中 i = 1, 2, 3。能量满足
@@ -122,6 +125,7 @@ $$
 - 保留下标  $a_{ij}$、希腊字母  $\alpha$ 和符号  $\bar{h}$。
 
 - 当  $c + d \neq 0$ 时，分式为  $\frac{a+b}{c+d}$
+```
 
 [View the exact Markdown source](validation/example-2.actual.md).
 
