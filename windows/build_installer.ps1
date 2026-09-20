@@ -1,10 +1,10 @@
-param([string]$Version = '0.2.0-preview.8')
+param([string]$Version = '0.2.0-preview.9')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $stage = Join-Path $root 'build\windows-installer'
 $dist = Join-Path $root 'dist'
-$builderPython = if ($env:CLIPBOARD_OCR_BUILDER_PYTHON) { $env:CLIPBOARD_OCR_BUILDER_PYTHON } else { Join-Path $root '.windows\runtime\Scripts\python.exe' }
+$builderPython = if ($env:CLIPBOARD_OCR_BUILDER_PYTHON) { $env:CLIPBOARD_OCR_BUILDER_PYTHON } else { Join-Path $env:LOCALAPPDATA 'ClipboardOCR\runtime\Scripts\python.exe' }
 $uv = (Get-Command uv -ErrorAction Stop).Source
 $llama = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter llama-server.exe -Recurse -ErrorAction Stop | Select-Object -First 1
 $iscc = @(

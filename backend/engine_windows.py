@@ -19,7 +19,7 @@ from engine import BackendError, normalize_markdown
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ClipboardOCR"
 LAYOUT = LOCAL / "paddlex/official_models/PP-DocLayoutV3"
-GGUF = ROOT / ".windows/models/PaddleOCR-VL-1.6-GGUF"
+GGUF = LOCAL / "models/PaddleOCR-VL-1.6-GGUF"
 
 
 def bounded_int(value, default, minimum, maximum):

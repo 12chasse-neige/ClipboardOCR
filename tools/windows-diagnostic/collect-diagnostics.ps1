@@ -53,21 +53,22 @@ foreach ($root in $uniqueRoots) {
     Add-Line "  ROOT: $root"
     $managedPythonRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\python'
     Add-Line "    Managed Python root: $managedPythonRoot"
+    $dataRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR'
     $expected = @(
         'windows\app.py', 'windows\launch.py', 'windows\setup.ps1',
-        '.windows\runtime\Scripts\python.exe',
-        '.windows\models\PaddleOCR-VL-1.6-GGUF\PaddleOCR-VL-1.6-GGUF.gguf',
-        '.windows\models\PaddleOCR-VL-1.6-GGUF\PaddleOCR-VL-1.6-GGUF-mmproj.gguf'
+        (Join-Path $dataRoot 'runtime\Scripts\python.exe'),
+        (Join-Path $dataRoot 'models\PaddleOCR-VL-1.6-GGUF\PaddleOCR-VL-1.6-GGUF.gguf'),
+        (Join-Path $dataRoot 'models\PaddleOCR-VL-1.6-GGUF\PaddleOCR-VL-1.6-GGUF-mmproj.gguf')
     )
     foreach ($relative in $expected) {
-        $path = Join-Path $root $relative
+        $path = if ([IO.Path]::IsPathRooted($relative)) { $relative } else { Join-Path $root $relative }
         if (Test-Path -LiteralPath $path) {
             $item = Get-Item -LiteralPath $path
             if ($item.PSIsContainer) {
                 $size = (Get-ChildItem -LiteralPath $path -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
-                Add-Line "    PASS $relative (directory, $([math]::Round($size/1MB,2)) MiB)"
-            } else { Add-Line "    PASS $relative ($([math]::Round($item.Length/1MB,2)) MiB)" }
-        } else { Add-Line "    MISSING $relative" }
+                Add-Line "    PASS $path (directory, $([math]::Round($size/1MB,2)) MiB)"
+            } else { Add-Line "    PASS $path ($([math]::Round($item.Length/1MB,2)) MiB)" }
+        } else { Add-Line "    MISSING $path" }
     }
     $managedPython = Get-ChildItem -LiteralPath $managedPythonRoot -Filter pythonw.exe -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($managedPython) {
@@ -80,7 +81,7 @@ foreach ($root in $uniqueRoots) {
         $size = (Get-ChildItem -LiteralPath $layout -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
         Add-Line "    PASS layout cache $layout ($([math]::Round($size/1MB,2)) MiB)"
     } else { Add-Line "    MISSING layout cache $layout" }
-    $runtimePython = Join-Path $root '.windows\runtime\Scripts\python.exe'
+    $runtimePython = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\runtime\Scripts\python.exe'
     if (Test-Path -LiteralPath $runtimePython) {
         & $runtimePython -c "import sys; print('python=' + sys.executable); print('version=' + sys.version.replace(chr(10),' ')); import paddle; print('paddle=' + getattr(paddle,'__version__','unknown')); print('cuda_compiled=' + str(paddle.is_compiled_with_cuda())); print('cuda_devices=' + str(paddle.device.cuda.device_count()))" 2>&1 | Set-Content -LiteralPath (Join-Path $reportDir 'runtime-import.txt') -Encoding UTF8
         break

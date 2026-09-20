@@ -12,10 +12,12 @@ trap {
 # uv creates a minor-version link directory below UV_PYTHON_INSTALL_DIR.  A
 # Steam/library volume can be reported by Windows as an untrusted mount point,
 # which makes that link creation fail before dependencies are installed. Keep
-# the managed interpreter in the user's trusted local profile; the app and its
-# larger runtime/model files can remain in the selected install directory.
-$pythonRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\python'
-$runtime = Join-Path $root '.windows\runtime'
+# the managed interpreter, virtual environment and model files in the user's
+# trusted local profile. The selected install directory only holds static app
+# files and bundled tools, so a Steam/library mount cannot break uv inspection.
+$dataRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR'
+$pythonRoot = Join-Path $dataRoot 'python'
+$runtime = Join-Path $dataRoot 'runtime'
 $python = Join-Path $runtime 'Scripts\python.exe'
 $bundledUv = Join-Path $root '.windows\tools\uv.exe'
 $uv = if (Test-Path -LiteralPath $bundledUv) { $bundledUv } else { (Get-Command uv -ErrorAction Stop).Source }

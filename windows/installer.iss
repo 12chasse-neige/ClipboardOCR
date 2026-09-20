@@ -5,7 +5,7 @@
   #error OutputDir is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-preview.8"
+  #define AppVersion "0.2.0-preview.9"
 #endif
 
 [Setup]
@@ -27,7 +27,7 @@ SetupIconFile={#StageDir}\assets\AppIcon.ico
 UninstallDisplayIcon={app}\assets\AppIcon.ico
 OutputDir={#OutputDir}
 OutputBaseFilename=ClipboardOCR-{#AppVersion}-windows-x64-setup
-VersionInfoVersion=0.2.0.8
+VersionInfoVersion=0.2.0.9
 AppMutex=Local\ClipboardOCR.Windows
 CloseApplications=yes
 RestartApplications=no
@@ -44,6 +44,8 @@ Filename: "{app}\windows\setup.cmd"; WorkingDir: "{app}"; Description: "Download
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\.windows"
+Type: filesandordirs; Name: "{localappdata}\ClipboardOCR\runtime"
+Type: filesandordirs; Name: "{localappdata}\ClipboardOCR\models"
 Type: files; Name: "{userdesktop}\Clipboard OCR.lnk"
 Type: filesandordirs; Name: "{app}\backend\__pycache__"
 Type: filesandordirs; Name: "{app}\windows\__pycache__"
