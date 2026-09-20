@@ -46,6 +46,11 @@ WM_HOTKEY, WM_QUIT = 0x0312, 0x0012
 MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, VK_O = 0x0001, 0x0002, 0x4000, 0x4F
 MAX_IMAGE_PIXELS = 12_000_000
 
+
+def should_start_hidden(render_path, tray_available):
+    """Keep the production app in the tray, but preserve render and fallback UI."""
+    return render_path is None and tray_available
+
 user32.GetClipboardSequenceNumber.restype = wintypes.DWORD
 user32.OpenClipboard.argtypes = [wintypes.HWND]
 user32.OpenClipboard.restype = wintypes.BOOL
@@ -518,9 +523,17 @@ def main():
     app.setFont(QFont("Segoe UI Variable Text", 10))
     app.setStyleSheet(STYLE)
     window = MainWindow(runtime=not render_path)
-    window.show()
     if render_path:
+        window.show()
         QTimer.singleShot(800, lambda: (window.grab().save(str(render_path)), app.quit()))
+    elif should_start_hidden(render_path, QSystemTrayIcon.isSystemTrayAvailable()):
+        window.hide()
+        QTimer.singleShot(700, lambda: window.tray.showMessage(
+            "Clipboard OCR", "Running in the notification area · Ctrl+Alt+O to recognize",
+            QSystemTrayIcon.Information, 3000))
+    else:
+        logger.warning("System tray unavailable; showing the main window")
+        window.show()
     sys.exit(app.exec())
 
 

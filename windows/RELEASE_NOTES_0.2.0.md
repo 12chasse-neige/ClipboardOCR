@@ -1,4 +1,4 @@
-# Clipboard OCR v0.2.0 Windows Preview 2
+# Clipboard OCR v0.2.0 Windows Preview 3
 
 Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup.
 
@@ -13,6 +13,8 @@ Updated downloadable Windows installer built from `feature/Windows`. This is a *
 ## Included
 
 - High-DPI desktop and tray interface with `Ctrl+Alt+O` global OCR shortcut
+- Starts silently in the notification area; closing the window returns it to the tray instead of exiting
+- Console-free desktop launch through `pythonw.exe`; backend processes also use no-window creation flags
 - Local image-to-Markdown recognition for prose, equations and document layout
 - Clipboard change protection and 64-bit multi-megabyte Unicode output
 - Bounded preprocessing for inputs above 12 megapixels
@@ -23,7 +25,7 @@ Updated downloadable Windows installer built from `feature/Windows`. This is a *
 
 ## Verification
 
-- 6 existing cross-platform Python tests and 5 Windows regression tests passed in GitHub Actions
+- 6 existing cross-platform Python tests and 6 Windows regression tests passed locally; the same suite runs in GitHub Actions
 - End-to-end fixture OCR returned 443 characters consistently
 - Forced llama.cpp termination recovered successfully and left zero child processes after exit
 - Warm RTX 4060 fixture latency measured about 0.8-0.9 seconds; this is not a general latency guarantee
