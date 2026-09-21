@@ -74,6 +74,17 @@ function Test-DataSnapshot($before, $after, [string]$label) {
     foreach ($name in $before.Keys) {
         $a = $before[$name]; $b = $after[$name]
         if ($a.Exists -and (-not $b.Exists)) { Write-Bad "$label`: $name directory is gone"; continue }
+        if ($name -eq 'runtime') {
+            # Setup legitimately refreshes packages inside the runtime - with a cold
+            # uv cache it re-downloads and reinstalls them - so a changed size is
+            # only a failure when content was actually lost.
+            if ($b.Bytes -lt ($a.Bytes * 0.8) -or $b.Count -lt ($a.Count * 0.8)) {
+                Write-Bad ("{0}: runtime lost content (files {1} -> {2}, bytes {3} -> {4})" -f $label, $a.Count, $b.Count, $a.Bytes, $b.Bytes)
+            } else {
+                Write-Ok ("{0}: runtime kept ({1} files, {2:N2} GB)" -f $label, $b.Count, ($b.Bytes / 1GB))
+            }
+            continue
+        }
         if ($a.Count -ne $b.Count -or $a.Bytes -ne $b.Bytes) {
             Write-Bad ("$label`: $name changed (files {0} -> {1}, bytes {2} -> {3})" -f $a.Count, $b.Count, $a.Bytes, $b.Bytes)
         } else {
