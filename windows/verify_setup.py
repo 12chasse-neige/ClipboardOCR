@@ -13,6 +13,8 @@ import paddle
 assert paddle.is_compiled_with_cuda(), "PaddlePaddle is not CUDA-enabled"
 assert paddle.device.cuda.device_count() > 0, "No CUDA GPU is visible to PaddlePaddle"
 print("GPU:", paddle.device.cuda.get_device_name(0))
+paddle.set_device("gpu:0")
+print("Paddle:", paddle.__version__, "CUDA:", paddle.version.cuda())
 
 # is_compiled_with_cuda() only says the wheel carries CUDA support; it does not say
 # it carries kernels for this card.  Run one real kernel so a build for the wrong
@@ -24,9 +26,9 @@ try:
 except Exception as error:
     raise SystemExit(
         f"GPU kernel launch failed on compute capability {capability}: {error}\n"
-        "The installed PaddlePaddle build has no kernels for this GPU architecture. "
-        "Blackwell (RTX 50) needs the cu129 build, Ada/Ampere/Turing the cu126 build, "
-        "and older cards the cu118 build; set CLIPBOARD_OCR_PADDLE_INDEX to force one."
+        "Check the NVIDIA driver, available VRAM, and Paddle CUDA build. "
+        "This release uses cu129 for capabilities 7.5/8.0/8.6/8.9/12.0, with Windows driver 576.02+. "
+        "Other GPU architectures are not covered by the pinned Windows wheel."
     )
 print("GPU kernel check passed on capability", capability)
 

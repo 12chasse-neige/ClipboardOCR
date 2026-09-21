@@ -15,16 +15,16 @@ This `feature/Windows` branch contains both platform implementations. It keeps t
 | Platform | Status | Native app | Accelerated inference | Validated configuration |
 |---|---|---|---|---|
 | macOS | **v0.1.0 baseline** | SwiftUI menu-bar app | Apple Silicon / MLX Metal | M4 Pro, 48 GB, macOS 26.6.2 |
-| Windows | **v0.2.0 Preview 13** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
+| Windows | **v0.2.0 Preview 14** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
 
-The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. macOS builds an ad-hoc signed `.app`; Windows Preview 13 provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
+The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. macOS builds an ad-hoc signed `.app`; Windows Preview 14 provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
 
 ## Windows quick start
 
 ### Download installer
 
-- [Download Clipboard OCR v0.2.0 Preview 13](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-preview.13).
-- Requires Windows 10/11 x64, an NVIDIA GPU with a current driver, about 10 GB free space, and Internet access during first setup.
+- [Download Clipboard OCR v0.2.0 Preview 14](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-preview.14).
+- Requires Windows 10/11 x64, a supported NVIDIA GPU (GTX 16/RTX 20/30/40/50 series), a current driver, about 15 GB free space, and Internet access during first setup.
 - The installer bundles pinned `uv` and llama.cpp tools. It then downloads the larger Paddle/CUDA environment and official model snapshot; it is not a 6 GB offline bundle.
 - The preview installer is not code-signed, so Windows may show an unknown-publisher warning. Verify the SHA-256 published with the Release before running it.
 
@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\setup.ps1
 
 Source installation additionally requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`). Setup installs the managed Python interpreter, virtual environment and models under `%LOCALAPPDATA%\ClipboardOCR`; the selected directory contains only static application files and bundled tools. This avoids Windows mount-point restrictions when the app is extracted under Steam or another library volume. It performs real end-to-end GPU OCR and creates **Clipboard OCR** on the desktop. Re-running setup reuses downloaded packages and models.
 
-The Windows preview reads the first NVIDIA GPU's VRAM and conservatively selects one slot below 7,000 MiB, two from 7,000 MiB, three from 11,000 MiB, or four from 15,000 MiB. `CLIPBOARD_OCR_CONCURRENCY=1..4` overrides this policy. It also safely handles multi-megabyte clipboard results, retries a crashed llama.cpp service once, bounds very large input images, and writes privacy-safe rotating diagnostics under `%LOCALAPPDATA%\ClipboardOCR\logs`. Only the two-slot RTX 4060 tier has been measured on real hardware; the other tiers are compatibility policies, not performance claims.
+The Windows preview reads the first NVIDIA GPU's currently available VRAM and conservatively selects one slot below 7,000 MiB, two from 7,000 MiB, three from 11,000 MiB, or four from 15,000 MiB. `CLIPBOARD_OCR_CONCURRENCY=1..4` overrides this policy. It also safely handles multi-megabyte clipboard results, retries a crashed llama.cpp service once, bounds very large input images, and writes privacy-safe rotating diagnostics under `%LOCALAPPDATA%\ClipboardOCR\logs`. Only the two-slot RTX 4060 tier has been measured on real hardware; the other tiers are compatibility policies, not performance claims.
 
 ## macOS quick start
 

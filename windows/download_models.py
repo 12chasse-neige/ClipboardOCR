@@ -1,42 +1,55 @@
-"""Download the official accelerated Windows VLM during setup.
+"""Revision-pinned model downloads with bounded retries and endpoint failover.
 
-huggingface.co is frequently unreachable from mainland China, and setup used to
-abort there.  Probe the Hub first and fall back to the community mirror when it
-cannot be reached; the revision is pinned and huggingface_hub verifies every
-downloaded file against it, so the mirror serves the same bytes.  Set HF_ENDPOINT
-yourself to override the choice, and CLIPBOARD_OCR_DISABLE_MIRROR=1 to keep the
-official endpoint even when the probe fails.
+Each endpoint runs in a new process: huggingface_hub reads configuration on
+import. Local metadata reuses completed files and partial downloads. Revision
+pinning alone is not a cryptographic checksum.
 """
 import os
-import urllib.error
-import urllib.request
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 REPO = "PaddlePaddle/PaddleOCR-VL-1.6-GGUF"
 REVISION = "511b09642bb324401f15f97cc23bc67e8f0a291d"
+OFFICIAL = "https://huggingface.co"
 MIRROR = "https://hf-mirror.com"
-PROBE = "https://huggingface.co/api/models/" + REPO
+FILES = ["PaddleOCR-VL-1.6-GGUF.gguf", "PaddleOCR-VL-1.6-GGUF-mmproj.gguf"]
 
 
-def huggingface_reachable():
-    try:
-        with urllib.request.urlopen(PROBE, timeout=10) as response:
-            return response.status == 200
-    except (urllib.error.URLError, OSError, ValueError):
-        return False
+def endpoints(environ):
+    if environ.get("HF_ENDPOINT"):
+        return [environ["HF_ENDPOINT"]]
+    return [OFFICIAL] if environ.get("CLIPBOARD_OCR_DISABLE_MIRROR") == "1" else [OFFICIAL, MIRROR]
 
 
-if not os.environ.get("HF_ENDPOINT") and os.environ.get("CLIPBOARD_OCR_DISABLE_MIRROR") != "1":
-    if huggingface_reachable():
-        print("huggingface.co reachable")
-    else:
-        os.environ["HF_ENDPOINT"] = MIRROR
-        # The Xet transfer backend is not served by the mirror; use plain HTTPS.
-        os.environ["HF_HUB_DISABLE_XET"] = "1"
-        print("huggingface.co is unreachable; downloading through " + MIRROR)
+def download():
+    from huggingface_hub import snapshot_download
+    local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ClipboardOCR"
+    print(snapshot_download(REPO, revision=REVISION, allow_patterns=FILES,
+                            local_dir=local / "models/PaddleOCR-VL-1.6-GGUF", max_workers=2), flush=True)
 
-# Imported only now: huggingface_hub reads HF_ENDPOINT while it is imported.
-from huggingface_hub import snapshot_download
 
-local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ClipboardOCR"
-print(snapshot_download(REPO, revision=REVISION, local_dir=local / "models/PaddleOCR-VL-1.6-GGUF"))
+def main():
+    if "--worker" in sys.argv:
+        download()
+        return 0
+    for endpoint in endpoints(os.environ):
+        env = os.environ.copy()
+        env.update(HF_ENDPOINT=endpoint, HF_HUB_DISABLE_XET="1", PYTHONUNBUFFERED="1")
+        env.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
+        env.setdefault("HF_HUB_ETAG_TIMEOUT", "15")
+        for attempt in range(1, 3):
+            print(f"Model download: {endpoint}, attempt {attempt}/2; keeping cached files", flush=True)
+            result = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker"], env=env)
+            if result.returncode == 0:
+                return 0
+            print(f"Download failed (exit {result.returncode}); retrying or switching endpoint.", flush=True)
+            if attempt < 2:
+                time.sleep(2)
+    print("Model download failed. Rerun setup to resume; inspect download_models.err.log.", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

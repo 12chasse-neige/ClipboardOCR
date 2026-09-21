@@ -5,6 +5,7 @@ import gc
 import atexit
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
@@ -43,17 +44,28 @@ def gpu_profile():
     try:
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         result = subprocess.run([
-            "nvidia-smi", "--query-gpu=name,memory.total",
+            "nvidia-smi", "--query-gpu=name,memory.total,memory.free",
             "--format=csv,noheader,nounits", "--id=0",
         ], capture_output=True, text=True, check=True, timeout=5, creationflags=flags)
-        name, memory = result.stdout.strip().splitlines()[0].rsplit(",", 1)
-        return name.strip(), int(memory.strip())
+        name, memory, free = result.stdout.strip().splitlines()[0].rsplit(",", 2)
+        return name.strip(), min(int(memory.strip()), int(free.strip()))
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):
         return "NVIDIA GPU", 0
 
 
+def select_vulkan_device(output, gpu_name):
+    # Vulkan and CUDA enumerate hybrid laptop adapters in different orders.
+    for line in output.splitlines():
+        match = re.match(r"\s*(Vulkan\d+):\s*(.*?)\s+\(", line)
+        if match and match[2].strip() == gpu_name:
+            return match[1]
+    return None
+
+
 def configure_environment():
     os.environ.update({
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+        "CUDA_VISIBLE_DEVICES": "0",
         "PADDLE_PDX_CACHE_HOME": str(LOCAL / "paddlex"),
         "HF_HOME": str(LOCAL / "huggingface"),
         "HF_HUB_DISABLE_TELEMETRY": "1",
@@ -89,6 +101,13 @@ class Engine:
         atexit.register(self.close)
 
     def _start_llama(self):
+        result = self._start_llama_once()
+        if result is None and self.concurrency > 1:
+            self.concurrency = 1
+            result = self._start_llama_once()
+        return result
+
+    def _start_llama_once(self):
         executable = find_llama_server()
         model = GGUF / "PaddleOCR-VL-1.6-GGUF.gguf"
         mmproj = GGUF / "PaddleOCR-VL-1.6-GGUF-mmproj.gguf"
@@ -99,15 +118,24 @@ class Engine:
             port = sock.getsockname()[1]
         token = secrets.token_urlsafe(32)
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            devices = subprocess.run([str(executable), "--list-devices"], capture_output=True,
+                                     text=True, timeout=20, check=True, creationflags=flags)
+            device = select_vulkan_device(devices.stdout + devices.stderr, self.gpu_name)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if device is None:
+            return None
         self.service = subprocess.Popen([
             str(executable), "-m", str(model), "--mmproj", str(mmproj),
             "--host", "127.0.0.1", "--port", str(port), "--temp", "0",
             "--ctx-size", "8192", "--parallel", str(self.concurrency), "--n-gpu-layers", "99",
+            "--device", device, "--split-mode", "none",
             "--api-key", token, "--no-ui", "--log-disable",
         ], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
            stderr=subprocess.DEVNULL, creationflags=flags)
         url = f"http://127.0.0.1:{port}"
-        deadline = time.monotonic() + 60
+        deadline = time.monotonic() + bounded_int(os.environ.get("CLIPBOARD_OCR_STARTUP_TIMEOUT"), 120, 30, 300)
         while time.monotonic() < deadline:
             if self.service.poll() is not None:
                 break

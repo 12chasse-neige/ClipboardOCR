@@ -15,6 +15,24 @@ import app as windows_app
 
 
 class WindowsEngineTests(unittest.TestCase):
+    def test_hybrid_laptop_selects_matching_nvidia_not_integrated_gpu(self):
+        devices = '  Vulkan0: Intel UHD Graphics (1024 MiB)\n  Vulkan1: NVIDIA GeForce RTX 5090 (32000 MiB)'
+        self.assertEqual(engine_windows.select_vulkan_device(devices, 'NVIDIA GeForce RTX 5090'), 'Vulkan1')
+        self.assertIsNone(engine_windows.select_vulkan_device(devices, 'NVIDIA GeForce RTX 4060'))
+
+    def test_failed_multi_slot_start_retries_with_one_slot(self):
+        with patch.object(engine_windows, 'gpu_profile', return_value=('test GPU', 16000)):
+            instance = engine_windows.Engine()
+        with patch.object(instance, '_start_llama_once', side_effect=[None, ('url', 'key', 'model')]) as start:
+            self.assertEqual(instance._start_llama(), ('url', 'key', 'model'))
+            self.assertEqual(instance.concurrency, 1)
+            self.assertEqual(start.call_count, 2)
+
+    def test_gpu_profile_uses_available_memory(self):
+        result = type('Result', (), {'stdout': 'NVIDIA GeForce RTX 4060, 8192, 4096\n'})()
+        with patch.object(engine_windows.subprocess, 'run', return_value=result):
+            self.assertEqual(engine_windows.gpu_profile(), ('NVIDIA GeForce RTX 4060', 4096))
+
     def test_requires_cuda(self):
         class FakeCuda:
             @staticmethod

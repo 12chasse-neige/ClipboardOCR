@@ -1,49 +1,37 @@
-# Clipboard OCR v0.2.0 Preview 13
+# Clipboard OCR v0.2.0 Preview 14
 
-Updated downloadable Windows installer built from `feature/Windows`. This is a **web installer**, not a complete offline bundle: it includes pinned setup tools and downloads about 6 GB of GPU runtime and model data during first setup. The managed Python interpreter, virtual environment and models are installed under `%LOCALAPPDATA%\ClipboardOCR`, avoiding untrusted-mount-point failures when the app is extracted under `D:\Steam\test` or another library volume.
+Windows installation reliability and device compatibility update from `feature/Windows`.
 
-Setup now builds the virtual environment with the standard library instead of `uv venv`. uv's managed Python install keeps a junction to the real interpreter and its virtual environments use trampoline executables, and a process tree that enables Redirection Guard (`EnforceRedirectionTrust`, inherited by children) cannot traverse those reparse points, which previously aborted setup with `ERROR_UNTRUSTED_MOUNT_POINT` (os error 448). Nothing in the install path depends on those links any more, so setup also completes when the installer is started from such a tree.
+## Download
 
-## Validated configuration
+Use **ClipboardOCR-0.2.0-preview.14-windows-x64-setup.exe**. Compare its SHA-256 with **SHA256SUMS.txt**. This is an unsigned web installer; the GPU runtime and models still require a first-run download. Allow about 15 GB free disk space including caches. Existing model and package caches are reused.
 
-- Windows 11 Home x64, build 26200
-- NVIDIA GeForce RTX 4060 Laptop GPU, 8 GB VRAM
-- PaddlePaddle GPU 3.2.1 / CUDA 12.6 / cuDNN 9.9.0.52
-- PaddleOCR 3.7.0 / PaddleOCR-VL 1.6
-- llama.cpp b11026, two automatically selected Vulkan inference slots
+## Fixed
 
-## Included
+- PyPI mirror priority: install from one selected source at a time, with bounded retries and real failure-driven failover. The former extra-index setting silently preferred official PyPI over the measured mirror.
+- Paddle wheel downloads: two official hosts, partial-file resume, visible byte progress and ZIP CRC validation before installation. Failed partial downloads survive setup restarts.
+- Model downloads: retry and switch endpoint after file-transfer failures, not only after an API reachability probe. Explicit endpoint overrides and the no-community-mirror option are respected.
+- RTX 50 dependency conflict: removed the obsolete safetensors 0.6.2.dev0 workaround. PaddleOCR 3.7.0 / PaddleX 3.7.2 resolve together with safetensors 0.7.0.
+- CUDA dependency consistency: use the cu129 wheel for all five supported architectures. The old cu126 wheel declares cuDNN 9.5 but warns at runtime that it was compiled with 9.9; the unified cu129 build declares and uses 9.9.0.52 consistently. Verify the complete dependency graph after installation.
+- Device changes: inspect the installed CUDA build, so an existing Paddle 3.2.1 cu126 environment is not mistaken for cu129 just because the version number matches.
+- GPU detection uses locale-independent parsing and stops clearly on failed detection, unsupported architecture or an outdated driver before downloading the large runtime.
+- Hybrid laptops: select the Vulkan adapter matching NVIDIA GPU 0. Concurrency uses available VRAM; a failed multi-slot server start retries with one slot.
+- Setup GPU verification explicitly selects `gpu:0`, runs a real GPU operation, then checks full OCR. It no longer attributes every CUDA failure solely to missing architecture kernels.
 
-- High-DPI desktop and tray interface with `Ctrl+Alt+O` global OCR shortcut
-- Opens the main interface immediately; closing it returns the app to the tray instead of exiting
-- Console-free desktop launch through the managed GUI `pythonw.exe`; backend processes also use no-window creation flags
-- Lower-right readiness notification after the OCR model has finished loading
-- Local image-to-Markdown recognition for prose, equations and document layout
-- Clipboard change protection and 64-bit multi-megabyte Unicode output
-- Bounded preprocessing for inputs above 12 megapixels
-- Automatic one-time recovery when the llama.cpp service crashes
-- Rotating local diagnostics that do not record images or recognized text
-- Idempotent source/runtime setup and revision-pinned GGUF model download
-- Setup now stops on dependency/model/GPU verification failures and writes `setup.log` instead of creating a broken shortcut
-- Setup failures keep a visible diagnostic window open instead of closing immediately
-- Setup creates the runtime with `python -m venv` and rebuilds a leftover environment that cannot start, instead of reusing it
-- Setup installs the PaddlePaddle build that matches the installed GPU (cu129 plus a patched safetensors wheel for Blackwell/RTX 50, the validated cu126 build for Turing/Ampere/Ada, cu118 for older cards) and runs a real GPU kernel before reporting success
-- Setup benchmarks the official package index against the Tsinghua and Tencent mirrors and uses the fastest one, and falls back to the Hugging Face mirror when `huggingface.co` is unreachable
-- Setup runs the model download and the GPU verification as redirected child processes, so Windows PowerShell 5.1 can no longer abort setup with "Index was outside the bounds of the array" while decoding their Unicode progress output
-- Uninstalling or upgrading no longer removes `%LOCALAPPDATA%\ClipboardOCR\runtime` and `\models`, so a reinstall reuses the downloaded runtime and model instead of fetching them again
-- The diagnostic bundle reports the Redirection Guard state and runs a junction traversal probe
-- Conservative VRAM-based selection of one to four inference slots, with an explicit environment override
+## Device coverage and limits
 
-## Verification
+| Windows wheel | Compiled GPU capabilities | cuDNN dependency |
+|---|---|---|
+| Paddle 3.2.1 cu129 / Python 3.12 x64 | 7.5, 8.0, 8.6, 8.9, 12.0 (GTX 16 / RTX 20 / 30 / 40 / 50 families) | 9.9.0.52 |
 
-- 6 existing cross-platform Python tests and 5 Windows regression tests passed locally; the same suite runs in GitHub Actions
-- End-to-end fixture OCR returned 443 characters consistently
-- Forced llama.cpp termination recovered successfully and left zero child processes after exit
-- Warm RTX 4060 fixture latency measured about 0.8-0.9 seconds; this is not a general latency guarantee
-- 4/8/12/16 GB slot-selection policy is regression-tested; only the 8 GB tier has real-GPU performance evidence
+**NVIDIA Windows driver 576.02 or newer is required on all supported GPUs.** Older drivers must be updated before setup. There is no separately maintained legacy CUDA 11/12.6 installation path.
 
-## Important
+These are the pinned wheel's build metadata and setup policies, not hardware qualification for every card. **RTX 50 hardware was not available for a real-device OCR test.** CPU-only, AMD/Intel-only, Windows ARM64 and architectures not listed above are not supported by this Windows runtime. NVIDIA GPU 0 is used; arbitrary multi-GPU scheduling is not provided.
 
-- The installer is not code-signed. Windows may display an unknown-publisher warning; verify the attached SHA-256 checksum.
-- NVIDIA GPU and current driver are required. Only the validated RTX 4060 configuration above is qualified in this preview.
-- macOS v0.1.0 remains in the same branch, with a separate SwiftUI/MLX build path. The Windows installer does not install the macOS application.
+The macOS v0.1.0 baseline remains unchanged. This release supplies a Windows installer; source archives still include both platforms.
+
+## Validation
+
+The accompanying `VALIDATION-preview.14.md` records exact checks and limitations. Network download success on this machine cannot guarantee speed or availability on every user's network.
+
+If setup fails, rerun **Complete Clipboard OCR Setup**. Logs are under `%LOCALAPPDATA%\ClipboardOCR\logs`. Do not delete the runtime/model caches as a first troubleshooting step.

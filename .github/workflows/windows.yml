@@ -18,8 +18,10 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install Pillow==12.1.0 PySide6==6.9.3
       - run: python -m unittest discover -s tests -p "test_*.py" -v
-      - run: python -m unittest windows.test_windows -v
-      - run: python -m py_compile windows/app.py windows/launch.py backend/engine_windows.py windows/download_models.py windows/verify_setup.py
+      - run: python -m unittest windows.test_windows windows.test_download_models windows.test_download_paddle -v
+      - shell: powershell
+        run: ./windows/test_setup.ps1
+      - run: python -m py_compile windows/app.py windows/launch.py backend/engine_windows.py windows/download_models.py windows/download_paddle.py windows/verify_setup.py
       - shell: pwsh
         run: |
           foreach ($file in 'windows/setup.ps1','windows/build_installer.ps1') {

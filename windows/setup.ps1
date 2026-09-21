@@ -1,10 +1,12 @@
+param([switch]$SkipShortcut)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'setup_helpers.ps1')
 $root = Split-Path -Parent $PSScriptRoot
 $logDir = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Start-Transcript -Path (Join-Path $logDir 'setup.log') -Append | Out-Null
 trap {
-    Write-Error $_
+    Write-Error $_ -ErrorAction Continue
     try { Stop-Transcript | Out-Null } catch { }
     exit 1
 }
@@ -23,62 +25,59 @@ $bundledUv = Join-Path $root '.windows\tools\uv.exe'
 $uv = if (Test-Path -LiteralPath $bundledUv) { $bundledUv } else { (Get-Command uv -ErrorAction Stop).Source }
 $env:UV_LINK_MODE = 'copy'
 
-# The official package index is unusable over some consumer links (measured at
-# ~0.01 MB/s, i.e. hours for the ~1.5 GB of wheels) while domestic mirrors serve
-# the same files at ~5 MB/s.  Measure a small ranged download from every
-# candidate and keep the fastest, then fall back to the official index for
-# anything a mirror does not carry.  CLIPBOARD_OCR_PYPI_INDEX forces one index,
-# CLIPBOARD_OCR_DISABLE_MIRROR=1 stays on the official index.
-$pypiProbe = '/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl'
-$pypiCandidates = @(
-    [pscustomobject]@{ Name = 'PyPI'; Index = 'https://pypi.org/simple'; Files = 'https://files.pythonhosted.org' },
-    [pscustomobject]@{ Name = 'Tsinghua TUNA'; Index = 'https://pypi.tuna.tsinghua.edu.cn/simple'; Files = 'https://pypi.tuna.tsinghua.edu.cn' },
-    [pscustomobject]@{ Name = 'Tencent Cloud'; Index = 'https://mirrors.cloud.tencent.com/pypi/simple'; Files = 'https://mirrors.cloud.tencent.com/pypi' }
-)
-
-function Measure-Throughput([string]$url) {
-    # Throughput of a 4 MiB ranged download in MB/s, or -1 when it fails.
-    # curl.exe ships with Windows 10 1803+; it is the only client here that
-    # honours a range request reliably from Windows PowerShell 5.1, and it uses
-    # the same HTTPS_PROXY environment variable as uv does.
-    if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) { return -1 }
-    $probe = 'curl.exe -sS -o NUL -w "%{time_total} %{size_download}" --max-time 15 -L -r 0-4194303 "' + $url + '" 2>NUL'
-    $output = cmd.exe /d /c $probe
-    $parts = @("$output" -split '\s+' | Where-Object { $_ })
-    if ($parts.Count -lt 2) { return -1 }
-    $seconds = 0.0
-    $bytes = 0.0
-    if (-not [double]::TryParse($parts[0], [ref]$seconds)) { return -1 }
-    if (-not [double]::TryParse($parts[1], [ref]$bytes)) { return -1 }
-    if ($seconds -le 0 -or $bytes -le 0) { return -1 }
-    return [math]::Round($bytes / 1MB / $seconds, 2)
-}
-
-$pypiIndex = 'https://pypi.org/simple'
+# Respect explicit source choices. Otherwise try domestic mirrors then PyPI;
+# source selection is proven by real installs, not a misleading tiny speed probe.
+$officialIndex = 'https://pypi.org/simple'
+$packageIndexes = @($officialIndex)
 if ($env:CLIPBOARD_OCR_PYPI_INDEX) {
-    $pypiIndex = $env:CLIPBOARD_OCR_PYPI_INDEX
-    Write-Host "Package index forced by CLIPBOARD_OCR_PYPI_INDEX: $pypiIndex"
+    $packageIndexes = @($env:CLIPBOARD_OCR_PYPI_INDEX)
 } elseif ($env:CLIPBOARD_OCR_DISABLE_MIRROR -ne '1') {
-    $bestSpeed = -1
-    $bestName = 'PyPI'
-    foreach ($candidate in $pypiCandidates) {
-        $speed = Measure-Throughput ($candidate.Files + $pypiProbe)
-        Write-Host ("Package index probe {0,-14} {1,7:N2} MB/s" -f $candidate.Name, $speed)
-        if ($speed -gt $bestSpeed) { $bestSpeed = $speed; $pypiIndex = $candidate.Index; $bestName = $candidate.Name }
-    }
-    if ($bestSpeed -le 0) {
-        $pypiIndex = 'https://pypi.org/simple'
-        Write-Warning 'No package index answered the speed probe; falling back to PyPI.'
-    } else {
-        Write-Host "Package index selected: $bestName ($pypiIndex)"
-        if ($bestSpeed -lt 0.1) {
-            Write-Warning "Every package index answered below 0.1 MB/s. Check the network and any HTTPS_PROXY setting; setup will be extremely slow otherwise."
-        }
-    }
+    $packageIndexes = @('https://pypi.tuna.tsinghua.edu.cn/simple', 'https://mirrors.cloud.tencent.com/pypi/simple', $officialIndex)
 }
-$pypiFallback = @()
-if ($pypiIndex -ne 'https://pypi.org/simple') { $pypiFallback = @('--extra-index-url', 'https://pypi.org/simple') }
+# Inherited uv extra indexes would silently outrank the selected source.
+foreach ($name in @('UV_INDEX', 'UV_EXTRA_INDEX_URL')) {
+    if (Test-Path "Env:$name") { Remove-Item "Env:$name" }
+}
+$env:UV_NO_CONFIG = '1'
+if (-not $env:UV_HTTP_TIMEOUT) { $env:UV_HTTP_TIMEOUT = '120' }
+if (-not $env:UV_HTTP_CONNECT_TIMEOUT) { $env:UV_HTTP_CONNECT_TIMEOUT = '10' }
+if (-not $env:UV_HTTP_RETRIES) { $env:UV_HTTP_RETRIES = '3' }
+if (-not $env:UV_CONCURRENT_DOWNLOADS) { $env:UV_CONCURRENT_DOWNLOADS = '2' }
+Write-Host "Package sources (in order): $($packageIndexes -join ', ')"
 
+# Preflight before any large download. The runtime currently uses NVIDIA GPU 0.
+if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+    throw 'This installer requires native Windows x64; Windows ARM64 is not supported.'
+}
+if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
+    throw 'An NVIDIA GPU and NVIDIA driver are required. AMD/Intel-only and CPU-only machines are not supported by this GPU runtime.'
+}
+$gpuOutput = & nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader --id=0
+if ($LASTEXITCODE -ne 0) { throw 'NVIDIA GPU detection failed. Update/reinstall the NVIDIA driver and rerun setup.' }
+$gpuFields = "$gpuOutput" -split ','
+if ($gpuFields.Count -ne 3) { throw "Unexpected NVIDIA GPU response: $gpuOutput" }
+$gpuName = $gpuFields[0].Trim()
+$cudaVariant = Get-CudaVariant $gpuFields[1]
+$driverVersion = $gpuFields[2].Trim()
+Write-Host "GPU 0: $gpuName (compute capability $($gpuFields[1].Trim()), driver $driverVersion)"
+Write-Host "Selected Paddle CUDA build: $cudaVariant"
+$driver = $null
+if (-not [version]::TryParse($driverVersion, [ref]$driver)) {
+    throw "Cannot identify NVIDIA driver version: $driverVersion"
+}
+if ($driver -lt [version]'576.02') {
+    throw "Update the NVIDIA Windows driver to 576.02 or newer before setup (installed: $driverVersion). The unified cu129 runtime supports GTX 16 / RTX 20-50 with a current driver."
+}
+if ($packageIndexes.Count -gt 1 -and (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
+    $reachable = @()
+    $unreachable = @()
+    foreach ($index in $packageIndexes) {
+        & curl.exe -s -f -L --max-time 8 -o NUL "$index/six/"
+        if ($LASTEXITCODE -eq 0) { $reachable += $index } else { $unreachable += $index }
+    }
+    $packageIndexes = @($reachable) + @($unreachable)
+    Write-Host "Reachable package sources first: $($packageIndexes -join ', ')"
+}
 
 # Windows PowerShell 5.1 decodes native command output with the console code page
 # and aborts with "Index was outside the bounds of the array" when a child process
@@ -88,16 +87,25 @@ if ($pypiIndex -ne 'https://pypi.org/simple') { $pypiFallback = @('--extra-index
 # straight to files that are read back with an explicit encoding, and the progress
 # bars are switched off on top of that.
 $env:PYTHONIOENCODING = 'utf-8'
+$env:PYTHONUNBUFFERED = '1'
 $env:HF_HUB_DISABLE_PROGRESS_BARS = '1'
 $env:TQDM_DISABLE = '1'
 
-function Invoke-PythonStep([string]$name) {
+function Invoke-PythonStep([string]$name, [string[]]$Arguments = @()) {
     $stdout = Join-Path $logDir "$name.out.log"
     $stderr = Join-Path $logDir "$name.err.log"
     $process = Start-Process -FilePath $python `
-        -ArgumentList @("`"$(Join-Path $PSScriptRoot "$name.py")`"") `
-        -Wait -NoNewWindow -PassThru `
+        -ArgumentList (@("`"$(Join-Path $PSScriptRoot "$name.py")`"") + $Arguments) `
+        -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    # Keep the native handle open; PowerShell 5.1 otherwise may return a null
+    # ExitCode after a short child process has already exited.
+    $null = $process.Handle
+    while (-not $process.WaitForExit(15000)) {
+        Write-Host "$name is still running; download cache is retained. Logs: $logDir"
+        if (Test-Path -LiteralPath $stdout) { Get-Content -LiteralPath $stdout -Encoding UTF8 -Tail 2 | ForEach-Object { Write-Host $_ } }
+    }
+    $process.WaitForExit()
     foreach ($file in @($stdout, $stderr)) {
         if ((Test-Path -LiteralPath $file) -and (Get-Item -LiteralPath $file).Length -gt 0) {
             Get-Content -LiteralPath $file -Encoding UTF8 | ForEach-Object { Write-Host $_ }
@@ -159,46 +167,50 @@ if (-not $runtimeReady) {
     & $basePython -m venv --without-pip $runtime
     if ($LASTEXITCODE -ne 0) { throw "python -m venv failed with exit code $LASTEXITCODE" }
 }
-# PaddlePaddle publishes one wheel per CUDA toolkit and each wheel only carries
-# kernels for the architectures that toolkit targets, so the build has to match
-# the installed GPU.  Blackwell (RTX 50, sm_120) needs the cu129 build plus the
-# special safetensors wheel from PaddleOCR's Blackwell guide, Ada/Ampere/Turing
-# use the validated cu126 build, and older cards fall back to cu118.
-# CLIPBOARD_OCR_PADDLE_INDEX overrides the choice.
-$gpuFields = @((& nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader --id=0)) -split ','
-$gpuName = if ($gpuFields.Count -ge 1) { $gpuFields[0].Trim() } else { 'NVIDIA GPU' }
-$computeCapability = 0.0
-if ($gpuFields.Count -ge 2) { [void][double]::TryParse($gpuFields[1].Trim(), [ref]$computeCapability) }
-$driverVersion = if ($gpuFields.Count -ge 3) { $gpuFields[2].Trim() } else { 'unknown' }
-$cudaVariant = 'cu126'
-if ($computeCapability -ge 12.0) {
-    $cudaVariant = 'cu129'
-} elseif ($computeCapability -gt 0 -and $computeCapability -lt 7.5) {
-    $cudaVariant = 'cu118'
-}
-$paddleIndex = "https://www.paddlepaddle.org.cn/packages/stable/$cudaVariant/"
-if ($env:CLIPBOARD_OCR_PADDLE_INDEX) { $paddleIndex = $env:CLIPBOARD_OCR_PADDLE_INDEX }
-Write-Host "GPU: $gpuName (compute capability $computeCapability, driver $driverVersion)"
-Write-Host "PaddlePaddle build: $paddleIndex"
-if ($computeCapability -ge 12.0 -and $driverVersion -ne 'unknown') {
-    $driverMajor = 0
-    [void][int]::TryParse(($driverVersion -split '\.')[0], [ref]$driverMajor)
-    if ($driverMajor -gt 0 -and $driverMajor -lt 575) {
-        Write-Warning "Blackwell needs a driver that supports CUDA 12.9 or newer (575+); this one reports $driverVersion."
+# Keep cu126/cu129 artifacts separate although both have package version 3.2.1.
+# Ordinary dependencies use PyPI mirrors rather than Paddle's specialized index.
+$paddleRequirement = 'paddlepaddle-gpu==3.2.1'
+$paddleIndexes = $packageIndexes
+# Old index installations lack direct_url metadata. Reinstall only when the
+# installed CUDA build cannot be verified, or differs from the selected build.
+$expectedCuda = '12.9'
+$installedCuda = & $python -c "import importlib.util; s=importlib.util.find_spec('paddle'); print('missing' if s is None else 'installed')" 2>$null
+$paddleArgs = @()
+$paddleReady = $false
+if ($installedCuda -eq 'installed') {
+    # Read build metadata without importing CUDA DLLs (which can fail before repair).
+    $versionFile = Join-Path $runtime 'Lib\site-packages\paddle\version\__init__.py'
+    $cudaMatch = if (Test-Path -LiteralPath $versionFile) {
+        Select-String -LiteralPath $versionFile -Pattern "^cuda_version\s*=\s*'$([regex]::Escape($expectedCuda))'"
+    } else { $null }
+    if (-not $cudaMatch) {
+        $paddleArgs = @('--reinstall-package', 'paddlepaddle-gpu')
+        Write-Host "Replacing an unverified or different Paddle CUDA build with $expectedCuda"
+    } else {
+        $paddleReady = [bool](Select-String -LiteralPath $versionFile -Pattern "^full_version\s*=\s*'3\.2\.1'")
     }
 }
-
-& $uv pip install --python $python --index-url $paddleIndex 'paddlepaddle-gpu==3.2.1'
-if ($LASTEXITCODE -ne 0) { throw "PaddlePaddle GPU installation failed with exit code $LASTEXITCODE" }
-if ($cudaVariant -eq 'cu129' -and -not $env:CLIPBOARD_OCR_PADDLE_INDEX) {
-    # PaddleOCR's Blackwell guide ships a patched safetensors build for Windows.
-    & $uv pip install --python $python 'https://xly-devops.cdn.bcebos.com/safetensors-nightly/safetensors-0.6.2.dev0-cp38-abi3-win_amd64.whl'
-    if ($LASTEXITCODE -ne 0) { throw "Blackwell safetensors installation failed with exit code $LASTEXITCODE" }
+if (-not $env:CLIPBOARD_OCR_PADDLE_INDEX) {
+    if ($paddleReady) {
+        $paddleRequirement = 'paddlepaddle-gpu==3.2.1'
+        Write-Host "Reusing installed Paddle 3.2.1 / CUDA $expectedCuda"
+    } else {
+        $wheelExit = Invoke-PythonStep 'download_paddle' @($cudaVariant)
+        if ($wheelExit -ne 0) { throw 'Paddle wheel download failed. Rerun setup to resume; see download_paddle.err.log.' }
+        $paddleRequirement = Join-Path $dataRoot "downloads\$cudaVariant\paddlepaddle_gpu-3.2.1-cp312-cp312-win_amd64.whl"
+    }
+} else {
+    # Extra indexes outrank the default: intentional for this explicit override,
+    # while ordinary dependencies remain available on the chosen PyPI source.
+    $paddleArgs += @('--index', $env:CLIPBOARD_OCR_PADDLE_INDEX)
 }
-& $uv pip install --python $python --index-url $pypiIndex @pypiFallback 'paddleocr[doc-parser]==3.7.0' 'PySide6==6.9.3' 'Pillow==12.1.0'
-if ($LASTEXITCODE -ne 0) { throw "PaddleOCR/PySide6/Pillow installation failed with exit code $LASTEXITCODE" }
-& $uv pip install --python $python --index-url $pypiIndex @pypiFallback 'nvidia-cudnn-cu12==9.9.0.52'
-if ($LASTEXITCODE -ne 0) { throw "cuDNN installation failed with exit code $LASTEXITCODE" }
+# PaddleOCR/PaddleX 3.7 requires safetensors >=0.7.0. The old Blackwell
+# 0.6.2.dev0 workaround is incompatible and must not be installed.
+# The unified cu129 wheel's cuDNN 9.9.0.52 dependency agrees with its binary.
+$appPackages = @('paddleocr[doc-parser]==3.7.0', 'paddlex[ocr]==3.7.2', 'safetensors==0.7.0', 'PySide6==6.9.3', 'Pillow==12.1.0')
+Invoke-UvInstall -Packages (@($paddleRequirement) + $appPackages) -Indexes $paddleIndexes -ExtraArgs $paddleArgs
+& $uv pip check --python $python
+if ($LASTEXITCODE -ne 0) { throw 'Installed dependencies are inconsistent. See setup.log.' }
 & $python -c "from PIL import Image; Image.open(r'$root\assets\AppIcon.png').save(r'$root\assets\AppIcon.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])"
 if ($LASTEXITCODE -ne 0) { throw "Icon preparation failed with exit code $LASTEXITCODE" }
 $bundledLlama = Join-Path $root '.windows\tools\llama\llama-server.exe'
@@ -220,6 +232,11 @@ $modelExit = Invoke-PythonStep 'download_models'
 if ($modelExit -ne 0) { throw "OCR model download failed with exit code $modelExit" }
 $verifyExit = Invoke-PythonStep 'verify_setup'
 if ($verifyExit -ne 0) { throw "GPU OCR verification failed with exit code $verifyExit" }
+if ($SkipShortcut) {
+    Write-Host 'Setup complete: verification passed; shortcut creation skipped.'
+    Stop-Transcript | Out-Null
+    exit 0
+}
 
 $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Clipboard OCR.lnk'
 $shell = New-Object -ComObject WScript.Shell
