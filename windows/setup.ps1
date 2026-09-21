@@ -72,7 +72,8 @@ if ($packageIndexes.Count -gt 1 -and (Get-Command curl.exe -ErrorAction Silently
     $reachable = @()
     $unreachable = @()
     foreach ($index in $packageIndexes) {
-        & curl.exe -s -f -L --max-time 8 -o NUL "$index/six/"
+        # Probe a real dependency's larger index page, not the tiny six wheel.
+        & curl.exe -s -f -L --max-time 8 -o NUL "$index/charset-normalizer/"
         if ($LASTEXITCODE -eq 0) { $reachable += $index } else { $unreachable += $index }
     }
     $packageIndexes = @($reachable) + @($unreachable)

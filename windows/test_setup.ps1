@@ -35,3 +35,5 @@ $rejected = $false
 try { Invoke-UvInstall -Packages @('example==1') -Indexes @('https://first.example/simple') } catch { $rejected = $true }
 Assert ($rejected -and $script:calls.Count -eq 2) 'Permanent failure must stop after bounded retries'
 Write-Host 'PASS: GPU matrix, locale-independent parsing, invalid detection, retries, source order, terminal failure'
+# GitHub's PowerShell wrapper propagates LASTEXITCODE; clear the injected error.
+$global:LASTEXITCODE = 0
