@@ -159,8 +159,42 @@ if (-not $runtimeReady) {
     & $basePython -m venv --without-pip $runtime
     if ($LASTEXITCODE -ne 0) { throw "python -m venv failed with exit code $LASTEXITCODE" }
 }
-& $uv pip install --python $python --index-url https://www.paddlepaddle.org.cn/packages/stable/cu126/ 'paddlepaddle-gpu==3.2.1'
+# PaddlePaddle publishes one wheel per CUDA toolkit and each wheel only carries
+# kernels for the architectures that toolkit targets, so the build has to match
+# the installed GPU.  Blackwell (RTX 50, sm_120) needs the cu129 build plus the
+# special safetensors wheel from PaddleOCR's Blackwell guide, Ada/Ampere/Turing
+# use the validated cu126 build, and older cards fall back to cu118.
+# CLIPBOARD_OCR_PADDLE_INDEX overrides the choice.
+$gpuFields = @((& nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader --id=0)) -split ','
+$gpuName = if ($gpuFields.Count -ge 1) { $gpuFields[0].Trim() } else { 'NVIDIA GPU' }
+$computeCapability = 0.0
+if ($gpuFields.Count -ge 2) { [void][double]::TryParse($gpuFields[1].Trim(), [ref]$computeCapability) }
+$driverVersion = if ($gpuFields.Count -ge 3) { $gpuFields[2].Trim() } else { 'unknown' }
+$cudaVariant = 'cu126'
+if ($computeCapability -ge 12.0) {
+    $cudaVariant = 'cu129'
+} elseif ($computeCapability -gt 0 -and $computeCapability -lt 7.5) {
+    $cudaVariant = 'cu118'
+}
+$paddleIndex = "https://www.paddlepaddle.org.cn/packages/stable/$cudaVariant/"
+if ($env:CLIPBOARD_OCR_PADDLE_INDEX) { $paddleIndex = $env:CLIPBOARD_OCR_PADDLE_INDEX }
+Write-Host "GPU: $gpuName (compute capability $computeCapability, driver $driverVersion)"
+Write-Host "PaddlePaddle build: $paddleIndex"
+if ($computeCapability -ge 12.0 -and $driverVersion -ne 'unknown') {
+    $driverMajor = 0
+    [void][int]::TryParse(($driverVersion -split '\.')[0], [ref]$driverMajor)
+    if ($driverMajor -gt 0 -and $driverMajor -lt 575) {
+        Write-Warning "Blackwell needs a driver that supports CUDA 12.9 or newer (575+); this one reports $driverVersion."
+    }
+}
+
+& $uv pip install --python $python --index-url $paddleIndex 'paddlepaddle-gpu==3.2.1'
 if ($LASTEXITCODE -ne 0) { throw "PaddlePaddle GPU installation failed with exit code $LASTEXITCODE" }
+if ($cudaVariant -eq 'cu129' -and -not $env:CLIPBOARD_OCR_PADDLE_INDEX) {
+    # PaddleOCR's Blackwell guide ships a patched safetensors build for Windows.
+    & $uv pip install --python $python 'https://xly-devops.cdn.bcebos.com/safetensors-nightly/safetensors-0.6.2.dev0-cp38-abi3-win_amd64.whl'
+    if ($LASTEXITCODE -ne 0) { throw "Blackwell safetensors installation failed with exit code $LASTEXITCODE" }
+}
 & $uv pip install --python $python --index-url $pypiIndex @pypiFallback 'paddleocr[doc-parser]==3.7.0' 'PySide6==6.9.3' 'Pillow==12.1.0'
 if ($LASTEXITCODE -ne 0) { throw "PaddleOCR/PySide6/Pillow installation failed with exit code $LASTEXITCODE" }
 & $uv pip install --python $python --index-url $pypiIndex @pypiFallback 'nvidia-cudnn-cu12==9.9.0.52'

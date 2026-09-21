@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1
 Uses the newest dist\ClipboardOCR-*-setup.exe into C:\ClipboardOCR-install-test.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1 -Installer .\dist\ClipboardOCR-0.2.0-preview.12-windows-x64-setup.exe -TestDir D:\ClipboardOCR-test -KeepInstall
+powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1 -Installer .\dist\ClipboardOCR-0.2.0-preview.13-windows-x64-setup.exe -TestDir D:\ClipboardOCR-test -KeepInstall
 #>
 [CmdletBinding()]
 param(
@@ -172,31 +172,42 @@ try {
     $logLinesBefore = 0
     if (Test-Path -LiteralPath $setupLog) { $logLinesBefore = @(Get-Content -LiteralPath $setupLog -ErrorAction SilentlyContinue).Count }
     # setup.cmd keeps its window open with `pause` when setup fails, so an
-    # unattended run watches the transcript for progress instead of waiting
-    # forever.  Do not redirect the child's stdin: PowerShell 5.1 refuses to
-    # launch native commands ("Index was outside the bounds of the array") when
-    # stdin is redirected, which would make every setup look like a failure.
+    # unattended run watches for progress instead of waiting forever.  Progress
+    # is not only what reaches the transcript: with a cold cache uv downloads for
+    # many minutes while writing only to its own logs, so a live worker process
+    # counts as progress too.  Do not redirect the child's stdin: PowerShell 5.1
+    # refuses to launch native commands ("Index was outside the bounds of the
+    # array") when stdin is redirected, which would make every setup look failed.
     $setupCmd = Join-Path $TestDir 'windows\setup.cmd'
     $setup = Start-Process -FilePath $setupCmd -WorkingDirectory $TestDir -PassThru
-    $deadline = (Get-Date).AddMinutes(30)
-    $lastGrowth = Get-Date
+    $deadline = (Get-Date).AddMinutes(90)
+    $lastProgress = Get-Date
     $lastLength = if (Test-Path -LiteralPath $setupLog) { (Get-Item -LiteralPath $setupLog).Length } else { 0 }
     $stalled = $false
     while (-not $setup.HasExited -and (Get-Date) -lt $deadline) {
         Start-Sleep -Seconds 5
         $length = if (Test-Path -LiteralPath $setupLog) { (Get-Item -LiteralPath $setupLog).Length } else { 0 }
-        if ($length -gt $lastLength) { $lastLength = $length; $lastGrowth = Get-Date }
-        elseif (((Get-Date) - $lastGrowth).TotalMinutes -gt 4) { $stalled = $true; break }
+        if ($length -gt $lastLength) {
+            $lastLength = $length
+            $lastProgress = Get-Date
+            continue
+        }
+        $workers = @(Get-Process -Name uv, python, pythonw, curl -ErrorAction SilentlyContinue |
+            Where-Object { $_.StartTime -ge $setup.StartTime.AddSeconds(-2) }).Count
+        if ($workers -gt 0) { $lastProgress = Get-Date; continue }
+        if (((Get-Date) - $lastProgress).TotalMinutes -gt 10) { $stalled = $true; break }
     }
-    if ($stalled) {
+    if (-not $setup.HasExited) {
+        & taskkill.exe /PID $setup.Id /T /F 2>$null | Out-Null
         $setup | Stop-Process -Force -ErrorAction SilentlyContinue
         foreach ($stray in @(Get-Process -Name cmd, powershell, conhost -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match 'Clipboard OCR setup' })) {
             Stop-Process -Id $stray.Id -Force -ErrorAction SilentlyContinue
         }
-        Write-Bad 'setup stopped writing to setup.log for four minutes (it is probably waiting on its failure prompt)'
-    } elseif (-not $setup.HasExited) {
-        $setup | Stop-Process -Force -ErrorAction SilentlyContinue
-        Write-Bad 'setup did not finish within 30 minutes'
+        if ($stalled) {
+            Write-Bad 'setup made no progress for ten minutes (it is probably waiting on its failure prompt)'
+        } else {
+            Write-Bad 'setup did not finish within 90 minutes'
+        }
     } elseif ($setup.ExitCode -ne 0) { Write-Bad "setup exit code $($setup.ExitCode); see $setupLog" }
     else { Write-Ok 'setup exit code 0' }
 
@@ -218,7 +229,14 @@ try {
     if ($KeepInstall) {
         Write-Info "-KeepInstall given; the scratch copy stays at $TestDir"
     } else {
+        # A setup that was killed mid-download can still hold files inside the
+        # scratch directory, which would make the uninstaller and the cleanup
+        # below fail; stop the whole tree first.
         [void](Stop-ClipboardOcrProcesses)
+        foreach ($worker in @(Get-Process -Name uv, python, pythonw, curl, setup, unins000 -ErrorAction SilentlyContinue)) {
+            Stop-Process -Id $worker.Id -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 2
         $uninstaller = Join-Path $TestDir 'unins000.exe'
         if (Test-Path -LiteralPath $uninstaller) {
             $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -PassThru
@@ -226,8 +244,10 @@ try {
             if ($uninstall.HasExited -and $uninstall.ExitCode -eq 0) { Write-Ok 'uninstaller exit code 0' }
             else { Write-Bad "uninstaller exit code $($uninstall.ExitCode)" }
         } else { Write-Bad 'unins000.exe is missing' }
-        Start-Sleep -Seconds 2
-        if (Test-Path -LiteralPath $TestDir) { Remove-Item -LiteralPath $TestDir -Recurse -Force -ErrorAction SilentlyContinue }
+        for ($attempt = 0; $attempt -lt 3 -and (Test-Path -LiteralPath $TestDir); $attempt++) {
+            Start-Sleep -Seconds 3
+            Remove-Item -LiteralPath $TestDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
         if (Test-Path -LiteralPath $TestDir) { Write-Bad "leftover files in $TestDir" } else { Write-Ok 'scratch directory removed' }
         Test-DataSnapshot $baseline (Get-DataSnapshot) 'after uninstall'
     }

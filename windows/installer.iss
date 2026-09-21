@@ -5,7 +5,7 @@
   #error OutputDir is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-preview.12"
+  #define AppVersion "0.2.0-preview.13"
 #endif
 
 [Setup]
@@ -27,7 +27,7 @@ SetupIconFile={#StageDir}\assets\AppIcon.ico
 UninstallDisplayIcon={app}\assets\AppIcon.ico
 OutputDir={#OutputDir}
 OutputBaseFilename=ClipboardOCR-{#AppVersion}-windows-x64-setup
-VersionInfoVersion=0.2.0.12
+VersionInfoVersion=0.2.0.13
 AppMutex=Local\ClipboardOCR.Windows
 CloseApplications=yes
 RestartApplications=no
