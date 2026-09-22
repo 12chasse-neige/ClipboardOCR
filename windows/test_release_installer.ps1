@@ -12,6 +12,12 @@ if ($hadKey) {
     if ($LASTEXITCODE) { throw 'Cannot back up app registration.' }
 }
 try {
+    if ($hadKey) {
+        # Prevent Inno Setup from invoking the existing installer's uninstaller.
+        # The original registration is restored in finally after the scratch install.
+        Remove-Item -LiteralPath $key -Recurse -Force
+        if (Test-Path -LiteralPath $key) { throw 'Cannot remove temporary app registration.' }
+    }
     $target = Join-Path $scratch 'app'
     $process = Start-Process -FilePath ([IO.Path]::GetFullPath($Installer)) -WindowStyle Hidden -Wait -PassThru `
         -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', '/NOCLOSEAPPLICATIONS', "/DIR=`"$target`"")
@@ -22,7 +28,7 @@ try {
         if ($actual -ne $expected) { throw "Packaged file differs from source: $file" }
     }
     $version = (Get-ItemProperty -LiteralPath $key).DisplayVersion
-    if ($version -ne '0.2.0-preview.14') { throw "Wrong installed version: $version" }
+    if ($version -ne '0.3.0') { throw "Wrong installed version: $version" }
     Write-Host "PASS: real installer exit 0, version $version, all changed packaged files match source"
     $python = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\runtime\Scripts\python.exe'
     $env:PYTHONIOENCODING = 'utf-8'

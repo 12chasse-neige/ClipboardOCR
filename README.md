@@ -15,18 +15,18 @@ This `feature/Windows` branch contains both platform implementations. It keeps t
 | Platform | Status | Native app | Accelerated inference | Validated configuration |
 |---|---|---|---|---|
 | macOS | **v0.1.0 baseline** | SwiftUI menu-bar app | Apple Silicon / MLX Metal | M4 Pro, 48 GB, macOS 26.6.2 |
-| Windows | **v0.2.0 Preview 14** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
+| Windows | **v0.3.0 combined release (Preview 14 runtime)** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
 
-The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. macOS builds an ad-hoc signed `.app`; Windows Preview 14 provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
+The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. The v0.3.0 release is the second combined macOS/Windows package: it keeps the macOS v0.1.0 component and ships the current Windows Preview 14 runtime under the 0.3.0 installer version. macOS builds an ad-hoc signed `.app`; Windows provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
 
 ## Windows quick start
 
 ### Download installer
 
-- [Download Clipboard OCR v0.2.0 Preview 14](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.2.0-preview.14).
+- [Download Clipboard OCR v0.3.0 — macOS + Windows](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.3.0).
 - Requires Windows 10/11 x64, a supported NVIDIA GPU (GTX 16/RTX 20/30/40/50 series), a current driver, about 15 GB free space, and Internet access during first setup.
 - The installer bundles pinned `uv` and llama.cpp tools. It then downloads the larger Paddle/CUDA environment and official model snapshot; it is not a 6 GB offline bundle.
-- The preview installer is not code-signed, so Windows may show an unknown-publisher warning. Verify the SHA-256 published with the Release before running it.
+- The Windows installer is not code-signed, so Windows may show an unknown-publisher warning. Verify the SHA-256 published with the Release before running it.
 
 After installation, leave **Download the GPU runtime and models now** selected. When setup reports success, start **Clipboard OCR** from the desktop. It opens the main interface without a console window; once the model is ready, a lower-right notification confirms startup. Closing the main window returns it to the tray. Copy an image or use `Win+Shift+S`, press `Ctrl+Alt+O`, then paste the generated Markdown. Use **Quit** from the tray menu to stop it completely.
 
