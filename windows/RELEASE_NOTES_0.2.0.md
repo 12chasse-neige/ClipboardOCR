@@ -26,7 +26,11 @@ Use **ClipboardOCR-0.2.0-preview.14-windows-x64-setup.exe**. Compare its SHA-256
 
 **NVIDIA Windows driver 576.02 or newer is required on all supported GPUs.** Older drivers must be updated before setup. There is no separately maintained legacy CUDA 11/12.6 installation path.
 
-These are the pinned wheel's build metadata and setup policies, not hardware qualification for every card. **RTX 50 hardware was not available for a real-device OCR test.** CPU-only, AMD/Intel-only, Windows ARM64 and architectures not listed above are not supported by this Windows runtime. NVIDIA GPU 0 is used; arbitrary multi-GPU scheduling is not provided.
+These are the pinned wheel's build metadata and setup policies, not hardware qualification for every card. Formal Preview 14 validation covers an RTX 4060 Laptop. A separate user test on an RTX 5060 reported successful setup, about 7.7 seconds for the first model load and about 3 seconds for OCR; this is a single-device acceptance result, not full RTX 50 family qualification. CPU-only, AMD/Intel-only, Windows ARM64 and architectures not listed above are not supported by this Windows runtime. NVIDIA GPU 0 is used; arbitrary multi-GPU scheduling is not provided.
+
+## Performance reference
+
+On the validated RTX 4060 8 GB machine, a practical user measurement observed approximately **20–30 seconds for the first model load** and **2–6 seconds per OCR request afterward**. These are single-machine reference ranges, not a general latency guarantee; image size/content, cache state, model slot count and background load can change the result. The controlled fixture timings in the validation record exclude model startup and should not be compared directly with this end-to-end range.
 
 The macOS v0.1.0 baseline remains unchanged. This release supplies a Windows installer; source archives still include both platforms.
 
