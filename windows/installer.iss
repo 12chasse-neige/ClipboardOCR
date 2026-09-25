@@ -5,7 +5,7 @@
   #error OutputDir is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.3.1"
 #endif
 
 [Setup]
@@ -16,6 +16,7 @@ AppPublisher=Clipboard OCR contributors
 AppPublisherURL=https://github.com/12chasse-neige/ClipboardOCR
 DefaultDirName={localappdata}\Programs\ClipboardOCR
 DefaultGroupName=Clipboard OCR
+DisableDirPage=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -27,7 +28,7 @@ SetupIconFile={#StageDir}\assets\AppIcon.ico
 UninstallDisplayIcon={app}\assets\AppIcon.ico
 OutputDir={#OutputDir}
 OutputBaseFilename=ClipboardOCR-{#AppVersion}-windows-x64-setup
-VersionInfoVersion=0.3.0.0
+VersionInfoVersion={#AppVersion}.0
 AppMutex=Local\ClipboardOCR.Windows
 CloseApplications=yes
 RestartApplications=no
@@ -47,9 +48,7 @@ Type: filesandordirs; Name: "{app}\.windows"
 Type: files; Name: "{userdesktop}\Clipboard OCR.lnk"
 Type: filesandordirs; Name: "{app}\backend\__pycache__"
 Type: filesandordirs; Name: "{app}\windows\__pycache__"
-; {localappdata}\ClipboardOCR\runtime and \models are deliberately NOT removed
-; here.  Setup reuses them, so deleting them made every upgrade and every
-; reinstall download the whole ~6 GB GPU runtime and model snapshot again, and an
-; uninstall that ran as part of an upgrade could destroy a working installation's
-; data before the new setup had a chance to reuse it.  To wipe the download cache
-; completely, delete %LOCALAPPDATA%\ClipboardOCR by hand.
+; {app}\data is deliberately not removed: it holds the Python runtime, setup
+; cache and model files. This preserves data during upgrades and allows a user
+; to inspect/remove it explicitly after uninstall. Setup logs remain under
+; %LOCALAPPDATA%\ClipboardOCR\logs.

@@ -6,14 +6,20 @@ This port keeps the original clipboard-safe workflow and Markdown output, but re
 
 - Windows 10/11 x64
 - NVIDIA GPU with compute capability 7.5, 8.0, 8.6, 8.9 or 12.0 (GTX 16 / RTX 20 / 30 / 40 / 50 series), and a current driver. RTX 4060 Laptop (8 GB, capability 8.9) is hardware-validated; other models still require real-device acceptance. CPU-only, AMD/Intel-only, Windows ARM64 and unlisted GPU architectures are not supported by this Windows runtime.
-- About 15 GB free disk space for Python packages, caches, and models
+- At least 25 GiB (26.8 GB) free on the drive selected for installation, for Python packages, caches, models, and temporary setup files. A validated cold setup used about 16.5 GiB of app data before cleanup.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`) for source installation; the Release installer bundles the required setup tools
 
 The tested machine is an RTX 4060 Laptop GPU with 8 GB VRAM and 32 GB system memory.
 
 ## Release installer
 
-[Download v0.3.0](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.3.0). This is the second combined macOS/Windows release; the Windows installer carries the current Preview 14 runtime with 0.3.0 installer metadata. The x64 web installer bundles pinned `uv` and llama.cpp runtimes, but downloads Paddle/CUDA packages and the official model during first setup. Allow about 15 GB free disk space and keep the machine online. The installer is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release. It stops and records `setup.log` when dependencies or models fail, and keeps the failure window open. The managed Python interpreter, virtual environment and models are placed in `%LOCALAPPDATA%\ClipboardOCR`, so Steam/library mount points do not block setup. The installed app opens its main interface through the managed GUI interpreter with no console window. A lower-right notification appears when the model is ready; closing the UI keeps OCR in the tray, while **Quit** in the tray menu exits it.
+[Download v0.3.1](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.3.1). This combined macOS/Windows release reuses the macOS v0.1.0 asset unchanged and updates the Windows installer.
+
+The installer always shows **Select Destination Location**. Choose a writable folder on D: or another drive to keep Python, the virtual environment, GPU packages, models, PaddleX/Hugging Face caches, uv download cache and app diagnostics under `<selected install folder>\data`. The default install folder is under the current user's profile, so accepting it keeps data on C:. Keep at least 25 GiB free on the selected install drive and stay online during first setup. Only small setup transcripts remain under `%LOCALAPPDATA%\ClipboardOCR\logs`.
+
+Windows security policy can reject some mount-point or protected paths. Setup checks that the selected folder can host managed Python, start a venv, and be inspected by uv **before downloading the large GPU packages or models**. If that preflight fails, it stops before those large downloads; choose a different ordinary writable folder and rerun setup. Older v0.3.0 data is not automatically moved or deleted. After v0.3.1 completes GPU OCR successfully, remove only the old `python`, `runtime`, `models`, `paddlex`, `huggingface`, and `downloads` folders under `%LOCALAPPDATA%\ClipboardOCR` if you want to reclaim that space. Keep `logs` for diagnostics.
+
+Both installers are x64 web installers: they bundle pinned `uv` and llama.cpp runtimes, but download Paddle/CUDA packages and the official model during first setup. Keep the machine online. The installer is not code-signed; compare its SHA-256 with the checksum attached to the GitHub Release. It stops and records `setup.log` when dependencies or models fail, and keeps the failure window open. The installed app opens its main interface through the managed GUI interpreter with no console window. A lower-right notification appears when the model is ready; closing the UI keeps OCR in the tray, while **Quit** in the tray menu exits it.
 
 Setup uses one **cu129** build for capabilities 7.5/8.0/8.6/8.9/12.0. All five architectures are present in the pinned Windows wheel; unknown or unsupported capabilities stop before large downloads. NVIDIA Windows driver **576.02 or newer** is required. This also avoids the cu126 wheel's inconsistent cuDNN declaration: it requests 9.5 but its binary reports compilation with 9.9. The cu129 build declares and uses cuDNN 9.9.0.52 consistently. The obsolete safetensors 0.6.2.dev0 workaround has been removed: PaddleOCR 3.7 / PaddleX 3.7.2 use safetensors 0.7.0. Setup checks the installed CUDA build as well as the package version, so upgrading an existing environment does not silently keep cu126.
 
@@ -25,7 +31,7 @@ Model transfer failures retry the official Hugging Face endpoint and then the co
 
 On hybrid laptops, llama.cpp explicitly selects the Vulkan adapter matching NVIDIA GPU 0 rather than assuming Vulkan and CUDA adapter order agree. Concurrency uses free VRAM at startup; a failed multi-slot server start retries with one slot. `CLIPBOARD_OCR_STARTUP_TIMEOUT=30..300` controls the server's per-attempt startup allowance (120 seconds by default). Only the real GPU kernel check and full OCR check establish that the particular machine works.
 
-The installer targets the current user and needs no administrator access. Leave **Download the GPU runtime and models now** selected on its final page. Setup performs a real OCR smoke test before creating the desktop shortcut.
+The installer targets the current user and needs no administrator access. Leave **Download the GPU runtime and models now** selected on its final page. Setup performs a real GPU-kernel check and end-to-end OCR smoke test before creating the desktop shortcut. The supported RTX 40-series compute capability is present in the selected wheel, but hardware verification is currently on one RTX 4060 Laptop; other card models are architecture-compatible targets, not individually hardware-certified.
 
 ## Install from source
 
@@ -35,7 +41,7 @@ Open PowerShell in the project directory and run:
 powershell -ExecutionPolicy Bypass -File .\windows\setup.ps1
 ```
 
-Setup installs the managed Python 3.12 interpreter, virtual environment and downloaded models under `%LOCALAPPDATA%\ClipboardOCR` (not an external uv interpreter). The selected application directory contains only static files and bundled tools, so Steam/library mount points cannot break uv's interpreter inspection. Setup also installs pinned application dependencies, llama.cpp, and a revision-pinned official PaddleOCR-VL GGUF model. Reruns reuse the environment and download cache instead of deleting them. The final check performs real end-to-end GPU OCR and creates `Clipboard OCR.lnk` on the desktop.
+Setup installs the managed Python 3.12 interpreter, virtual environment, package cache, models, and inference caches under `<application directory>\data`. Choosing a D: (or other) install directory therefore keeps those large files there with the app. Reruns reuse that environment and its download cache. Before large downloads, setup checks available disk space, Python startup, and uv interpreter inspection for the selected path. The final check performs real end-to-end GPU OCR and creates `Clipboard OCR.lnk` on the desktop. Installer/setup logs remain under `%LOCALAPPDATA%\ClipboardOCR\logs`; app logs are in `<application directory>\data\logs`.
 
 ## Use
 

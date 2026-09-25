@@ -15,18 +15,20 @@ This `feature/Windows` branch contains both platform implementations. It keeps t
 | Platform | Status | Native app | Accelerated inference | Validated configuration |
 |---|---|---|---|---|
 | macOS | **v0.1.0 baseline** | SwiftUI menu-bar app | Apple Silicon / MLX Metal | M4 Pro, 48 GB, macOS 26.6.2 |
-| Windows | **v0.3.0 combined release (Preview 14 runtime)** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
+| Windows | **v0.3.1** | PySide6 high-DPI window and tray app | NVIDIA CUDA layout + llama.cpp Vulkan VLM | Windows 11 x64, RTX 4060 Laptop 8 GB |
 
-The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. The v0.3.0 release is the second combined macOS/Windows package: it keeps the macOS v0.1.0 component and ships the current Windows Preview 14 runtime under the 0.3.0 installer version. macOS builds an ad-hoc signed `.app`; Windows provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
+The user workflow and Markdown output contract are shared, but installation, shortcuts and GPU runtimes are platform-specific. Both versions are local-only and keep no OCR history. The v0.3.1 release reuses the macOS v0.1.0 component unchanged and updates the Windows installer so users can choose its install drive; runtime, packages, caches and model data go under that selected folder. macOS builds an ad-hoc signed `.app`; Windows provides an unsigned web installer that creates an isolated runtime and desktop shortcut.
 
 ## Windows quick start
 
 ### Download installer
 
-- [Download Clipboard OCR v0.3.0 — macOS + Windows](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.3.0).
-- Requires Windows 10/11 x64, a supported NVIDIA GPU (GTX 16/RTX 20/30/40/50 series), a current driver, about 15 GB free space, and Internet access during first setup.
+- [Download Clipboard OCR v0.3.1 — macOS + Windows](https://github.com/12chasse-neige/ClipboardOCR/releases/tag/v0.3.1).
+- Requires Windows 10/11 x64, a supported NVIDIA GPU (GTX 16/RTX 20/30/40/50 series), a current driver, at least 25 GiB free on the install drive, and Internet access during first setup.
 - The installer bundles pinned `uv` and llama.cpp tools. It then downloads the larger Paddle/CUDA environment and official model snapshot; it is not a 6 GB offline bundle.
 - The Windows installer is not code-signed, so Windows may show an unknown-publisher warning. Verify the SHA-256 published with the Release before running it.
+
+On the installer's **Select Destination Location** page, choose a folder on D: or another drive to keep the large files off C:. Python, GPU packages, model weights, download caches and app diagnostics are stored under `<selected install folder>\data`; only small setup transcripts remain in `%LOCALAPPDATA%\ClipboardOCR\logs`. The default app folder is under the current user's profile, so accepting it places the data on C:. Keep at least 25 GiB free on the selected drive. A full cold setup measured about 16.5 GiB of app data on the validation machine; the preflight leaves headroom for temporary and resumable downloads. Data from previous versions in `%LOCALAPPDATA%\ClipboardOCR` is intentionally neither moved nor removed; after the new install passes its GPU OCR check, remove the old data there manually if you no longer need it.
 
 After installation, leave **Download the GPU runtime and models now** selected. When setup reports success, start **Clipboard OCR** from the desktop. It opens the main interface without a console window; once the model is ready, a lower-right notification confirms startup. Closing the main window returns it to the tray. Copy an image or use `Win+Shift+S`, press `Ctrl+Alt+O`, then paste the generated Markdown. Use **Quit** from the tray menu to stop it completely.
 
@@ -38,9 +40,9 @@ cd ClipboardOCR
 powershell -ExecutionPolicy Bypass -File .\windows\setup.ps1
 ```
 
-Source installation additionally requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`). Setup installs the managed Python interpreter, virtual environment and models under `%LOCALAPPDATA%\ClipboardOCR`; the selected directory contains only static application files and bundled tools. This avoids Windows mount-point restrictions when the app is extracted under Steam or another library volume. It performs real end-to-end GPU OCR and creates **Clipboard OCR** on the desktop. Re-running setup reuses downloaded packages and models.
+Source installation additionally requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and Windows Package Manager (`winget`). Setup installs the managed interpreter, virtual environment, models, and package caches under `<application directory>\data`, with small setup logs under `%LOCALAPPDATA%\ClipboardOCR\logs`. Setup checks that the selected path can host and run Python and be inspected by uv before starting any large downloads. If Windows rejects a protected or mount-point path, choose a different writable install folder and rerun. It performs real end-to-end GPU OCR and creates **Clipboard OCR** on the desktop. Re-running setup reuses downloaded packages and models.
 
-The Windows preview reads the first NVIDIA GPU's currently available VRAM and conservatively selects one slot below 7,000 MiB, two from 7,000 MiB, three from 11,000 MiB, or four from 15,000 MiB. `CLIPBOARD_OCR_CONCURRENCY=1..4` overrides this policy. It also safely handles multi-megabyte clipboard results, retries a crashed llama.cpp service once, bounds very large input images, and writes privacy-safe rotating diagnostics under `%LOCALAPPDATA%\ClipboardOCR\logs`. The formal release validation covers the two-slot RTX 4060 tier; a separate RTX 5060 user run has also reported successful setup, but neither result is a performance guarantee for every GPU in the family.
+The Windows preview reads the first NVIDIA GPU's currently available VRAM and conservatively selects one slot below 7,000 MiB, two from 7,000 MiB, three from 11,000 MiB, or four from 15,000 MiB. `CLIPBOARD_OCR_CONCURRENCY=1..4` overrides this policy. It also safely handles multi-megabyte clipboard results, retries a crashed llama.cpp service once, bounds very large input images, and writes privacy-safe rotating app diagnostics under `<application directory>\data\logs`; small installer/setup transcripts remain under `%LOCALAPPDATA%\ClipboardOCR\logs`. The formal release validation covers the two-slot RTX 4060 tier; a separate RTX 5060 user run has also reported successful setup, but neither result is a performance guarantee for every GPU in the family.
 
 Practical Windows performance reference: on an RTX 4060 8 GB machine, one observed run took about **20–30 seconds for the first model load** and **2–6 seconds per OCR request afterward**. This is a single-machine reference range; image size/content, cache state, model slot count and background load can change the result. A separate RTX 5060 run reported about 7.7 seconds for the first load and 3 seconds for OCR, but that is also a single-device observation.
 

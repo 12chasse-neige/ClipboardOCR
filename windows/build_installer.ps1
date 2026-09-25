@@ -1,10 +1,14 @@
-param([string]$Version = '0.3.0')
+param([string]$Version = '0.3.1')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$stage = Join-Path $root 'build\windows-installer'
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must be a stable semver triplet, got: $Version" }
+$stage = Join-Path $root "build\windows-installer-$Version"
 $dist = Join-Path $root 'dist'
-$builderPython = if ($env:CLIPBOARD_OCR_BUILDER_PYTHON) { $env:CLIPBOARD_OCR_BUILDER_PYTHON } else { Join-Path $env:LOCALAPPDATA 'ClipboardOCR\runtime\Scripts\python.exe' }
+$builderPython = if ($env:CLIPBOARD_OCR_BUILDER_PYTHON) { $env:CLIPBOARD_OCR_BUILDER_PYTHON } else {
+    $appPython = Join-Path $root 'data\runtime\Scripts\python.exe'
+    if (Test-Path -LiteralPath $appPython) { $appPython } else { Join-Path $env:LOCALAPPDATA 'ClipboardOCR\runtime\Scripts\python.exe' }
+}
 $uv = (Get-Command uv -ErrorAction Stop).Source
 $llama = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter llama-server.exe -Recurse -ErrorAction Stop | Select-Object -First 1
 $iscc = @(
@@ -23,16 +27,17 @@ $llamaVersion = (cmd.exe /d /c "`"$($llama.FullName)`" --version 2>&1") -join "`
 if ($uvVersion -notmatch '^uv 0\.11\.19 ') { throw "Expected uv 0.11.19, found: $uvVersion" }
 if ($llamaVersion -notmatch 'build 11026, commit b49650adb') { throw "Expected llama.cpp b11026/b49650adb, found: $llamaVersion" }
 
-$stagePath = [IO.Path]::GetFullPath($stage)
 $buildPath = [IO.Path]::GetFullPath((Join-Path $root 'build'))
-if (-not $stagePath.StartsWith($buildPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe staging path.' }
-if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+$stagePath = [IO.Path]::GetFullPath($stage)
+$buildPrefix = $buildPath.TrimEnd('\') + '\'
+if (-not $stagePath.StartsWith($buildPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe staging path.' }
+if (Test-Path -LiteralPath $stage) { throw "Versioned staging directory already exists; inspect it before rebuilding: $stage" }
 New-Item -ItemType Directory -Path $stage,$dist,"$stage\backend","$stage\windows","$stage\assets","$stage\validation","$stage\.windows\tools\llama","$stage\licenses" -Force | Out-Null
 
 $files = @(
     'README.md', 'WINDOWS.md',
     'backend\engine.py', 'backend\engine_windows.py',
-    'windows\app.py', 'windows\download_models.py', 'windows\download_paddle.py', 'windows\launch.py', 'windows\setup.cmd', 'windows\setup.ps1', 'windows\setup_helpers.ps1', 'windows\verify_setup.py',
+    'windows\app.py', 'windows\download_models.py', 'windows\download_paddle.py', 'windows\launch.py', 'windows\paths.py', 'windows\setup.cmd', 'windows\setup.ps1', 'windows\setup_helpers.ps1', 'windows\verify_setup.py',
     'assets\AppIcon.png', 'validation\example-1.png'
 )
 foreach ($file in $files) {

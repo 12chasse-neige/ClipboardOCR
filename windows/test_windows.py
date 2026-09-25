@@ -15,6 +15,11 @@ import app as windows_app
 
 
 class WindowsEngineTests(unittest.TestCase):
+    def test_runtime_and_models_follow_selected_app_directory(self):
+        self.assertEqual(engine_windows.LOCAL, ROOT / "data")
+        self.assertEqual(engine_windows.LAYOUT, ROOT / "data/paddlex/official_models/PP-DocLayoutV3")
+        self.assertEqual(engine_windows.GGUF, ROOT / "data/models/PaddleOCR-VL-1.6-GGUF")
+
     def test_hybrid_laptop_selects_matching_nvidia_not_integrated_gpu(self):
         devices = '  Vulkan0: Intel UHD Graphics (1024 MiB)\n  Vulkan1: NVIDIA GeForce RTX 5090 (32000 MiB)'
         self.assertEqual(engine_windows.select_vulkan_device(devices, 'NVIDIA GeForce RTX 5090'), 'Vulkan1')

@@ -1,5 +1,4 @@
 import io
-import os
 import tempfile
 import unittest
 import zipfile
@@ -47,8 +46,8 @@ class WheelDownloadTests(unittest.TestCase):
             self.assertEqual(part.read_bytes(), b'abc')
 
     def test_cached_valid_wheel_skips_network(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {'LOCALAPPDATA': directory}):
-            target = Path(directory) / 'ClipboardOCR/downloads/cu129/paddlepaddle_gpu-3.2.1-cp312-cp312-win_amd64.whl'
+        with tempfile.TemporaryDirectory() as directory, patch.object(wheel, 'data_root', return_value=Path(directory) / 'data'):
+            target = Path(directory) / 'data/downloads/cu129/paddlepaddle_gpu-3.2.1-cp312-cp312-win_amd64.whl'
             target.parent.mkdir(parents=True)
             with zipfile.ZipFile(target, 'w') as archive:
                 archive.writestr('paddle/version/__init__.py', "cuda_version = '12.9'")

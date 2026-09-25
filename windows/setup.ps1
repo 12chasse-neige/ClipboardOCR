@@ -11,15 +11,15 @@ trap {
     exit 1
 }
 
-# uv creates a minor-version link directory below UV_PYTHON_INSTALL_DIR.  A
-# Steam/library volume can be reported by Windows as an untrusted mount point,
-# which makes that link creation fail before dependencies are installed. Keep
-# the managed interpreter, virtual environment and model files in the user's
-# trusted local profile. The selected install directory only holds static app
-# files and bundled tools, so a Steam/library mount cannot break uv inspection.
-$dataRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR'
+# Mutable data is stored next to the selected installation directory. This lets
+# the user put the multi-gigabyte runtime and models on another drive by choosing
+# that drive in the installer. Since Windows can reject some mount points, prove
+# this exact target with a managed interpreter, venv launch, and uv inspection
+# before downloading any large dependencies.
+$dataRoot = Join-Path $root 'data'
 $pythonRoot = Join-Path $dataRoot 'python'
 $runtime = Join-Path $dataRoot 'runtime'
+$uvCache = Join-Path $dataRoot 'uv-cache'
 $python = Join-Path $runtime 'Scripts\python.exe'
 $bundledUv = Join-Path $root '.windows\tools\uv.exe'
 $uv = if (Test-Path -LiteralPath $bundledUv) { $bundledUv } else { (Get-Command uv -ErrorAction Stop).Source }
@@ -120,13 +120,27 @@ if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) {
 }
 
 $env:UV_PYTHON_INSTALL_DIR = $pythonRoot
-New-Item -ItemType Directory -Path $pythonRoot -Force | Out-Null
+$env:UV_CACHE_DIR = $uvCache
+$env:HF_HOME = Join-Path $dataRoot 'huggingface'
+$env:PADDLE_PDX_CACHE_HOME = Join-Path $dataRoot 'paddlex'
 Write-Host "Managed Python directory: $pythonRoot"
+$driveRoot = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($dataRoot))
+$installDrive = [IO.DriveInfo]::new($driveRoot)
+if (-not $installDrive.IsReady) { throw "The selected install drive is not ready: $driveRoot" }
+if ($installDrive.AvailableFreeSpace -lt 25GB) {
+    throw "The selected install drive needs at least 25 GiB (26.8 GB) free for the GPU runtime, models, resumable package cache, and temporary files. Available: $([math]::Round($installDrive.AvailableFreeSpace / 1GB, 1)) GiB. Choose a different install directory and rerun setup."
+}
+New-Item -ItemType Directory -Path $pythonRoot,$uvCache -Force | Out-Null
 $uvInstallOutput = cmd.exe /d /c "`"$uv`" python install 3.12.13 2>&1"
 $pythonInstallExit = $LASTEXITCODE
-$basePython = (& $uv python find 3.12.13 --managed-python).Trim()
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $basePython)) {
-    throw "Managed Python 3.12.13 was not installed (uv exit code $pythonInstallExit).`n$($uvInstallOutput -join "`n")"
+$pythonFindOutput = cmd.exe /d /c "`"$uv`" python find 3.12.13 --managed-python 2>&1"
+$pythonFindExit = $LASTEXITCODE
+if ($pythonFindExit -ne 0) {
+    throw "Managed Python 3.12.13 could not be found (install exit code $pythonInstallExit; find exit code $pythonFindExit).`n$($uvInstallOutput -join "`n")`n$($pythonFindOutput -join "`n")"
+}
+$basePython = (($pythonFindOutput | Out-String).Trim())
+if ([string]::IsNullOrWhiteSpace($basePython) -or -not (Test-Path -LiteralPath $basePython)) {
+    throw "uv returned no usable managed Python path (install exit code $pythonInstallExit).`n$($pythonFindOutput -join "`n")"
 }
 $pythonRootPrefix = ([IO.Path]::GetFullPath($pythonRoot)).TrimEnd('\') + '\'
 if (-not ([IO.Path]::GetFullPath($basePython)).StartsWith($pythonRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
@@ -155,19 +169,25 @@ if (Test-Path -LiteralPath $python) {
     }
 }
 if (-not $runtimeReady) {
-    # Build the environment with the standard library instead of `uv venv`.
-    # uv writes a trampoline python.exe that resolves its base interpreter at
-    # start-up through uv's junction layout (<pythonRoot>\cpython-3.12-windows-
-    # x86_64-none -> cpython-3.12.13-...).  A process tree that runs with
-    # Redirection Guard (EnforceRedirectionTrust, inherited by every child) may
-    # not traverse a junction created by a non-elevated process, so uv fails with
-    # ERROR_UNTRUSTED_MOUNT_POINT (os error 448) while creating the link
-    # directory and again while inspecting the finished environment.  The
-    # standard library creates a plain, relocatable environment with copied
-    # executables, and `uv pip install` fills it normally even under that policy.
+    # Build the venv with the standard library rather than `uv venv`: Windows
+    # venvs use the standard Python launcher instead of uv's Python trampoline.
+    # The preflight below tests this exact path and rejects any mount-point or
+    # redirection policy that prevents Python/uv from using it.
     & $basePython -m venv --without-pip $runtime
     if ($LASTEXITCODE -ne 0) { throw "python -m venv failed with exit code $LASTEXITCODE" }
 }
+# Fail before wheel/package/model downloads if this drive's security policy or
+# mount-point layout prevents uv from inspecting the virtual environment.
+& $python -c "import sys; assert sys.prefix != sys.base_prefix; print(sys.prefix)"
+if ($LASTEXITCODE -ne 0) {
+    throw "The selected runtime folder cannot start its Python environment: $python. Choose a normal writable local folder on another drive and rerun setup."
+}
+$storageCheckOutput = cmd.exe /d /c "`"$uv`" pip check --python `"$python`" 2>&1"
+$storageCheckExit = $LASTEXITCODE
+if ($storageCheckExit -ne 0) {
+    throw "The selected install folder is not supported by uv/Windows path security: uv cannot inspect $python. No large dependencies were downloaded.`n$($storageCheckOutput -join "`n")`nChoose a different install directory (for example, outside a protected Steam/library mount) and rerun setup."
+}
+Write-Host "Storage preflight passed: Python and uv can use $dataRoot"
 # Keep cu126/cu129 artifacts separate although both have package version 3.2.1.
 # Ordinary dependencies use PyPI mirrors rather than Paddle's specialized index.
 $paddleRequirement = 'paddlepaddle-gpu==3.2.1'

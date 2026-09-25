@@ -15,10 +15,11 @@ import warnings
 from pathlib import Path
 
 from engine import BackendError, normalize_markdown
+from windows.paths import data_root
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ClipboardOCR"
+LOCAL = data_root(ROOT)
 LAYOUT = LOCAL / "paddlex/official_models/PP-DocLayoutV3"
 GGUF = LOCAL / "models/PaddleOCR-VL-1.6-GGUF"
 

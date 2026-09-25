@@ -1,5 +1,4 @@
 """Download the large Windows Paddle wheel with resume and ZIP CRC validation."""
-import os
 import http.client
 import re
 import sys
@@ -9,6 +8,10 @@ import urllib.request
 import zipfile
 import zlib
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from windows.paths import data_root
 
 HOSTS = ("https://paddle-whl.bj.bcebos.com", "https://paddle-whl.cdn.bcebos.com")
 
@@ -62,7 +65,7 @@ def transfer(url, part):
 def download(variant):
     if variant not in ("cu126", "cu129"):
         raise ValueError("Unsupported Paddle CUDA variant")
-    local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ClipboardOCR"
+    local = data_root()
     destination = local / "downloads" / variant / "paddlepaddle_gpu-3.2.1-cp312-cp312-win_amd64.whl"
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists() and valid_wheel(destination):

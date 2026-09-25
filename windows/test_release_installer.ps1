@@ -22,19 +22,18 @@ try {
     $process = Start-Process -FilePath ([IO.Path]::GetFullPath($Installer)) -WindowStyle Hidden -Wait -PassThru `
         -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', '/NOCLOSEAPPLICATIONS', "/DIR=`"$target`"")
     if ($process.ExitCode -ne 0) { throw "Installer exit code: $($process.ExitCode)" }
-    foreach ($file in @('windows\setup.ps1', 'windows\setup_helpers.ps1', 'windows\download_models.py', 'windows\download_paddle.py', 'windows\verify_setup.py', 'backend\engine_windows.py', 'README.md', 'WINDOWS.md')) {
+    foreach ($file in @('windows\setup.ps1', 'windows\setup_helpers.ps1', 'windows\download_models.py', 'windows\download_paddle.py', 'windows\verify_setup.py', 'windows\paths.py', 'backend\engine_windows.py', 'README.md', 'WINDOWS.md')) {
         $actual = (Get-FileHash -LiteralPath (Join-Path $target $file) -Algorithm SHA256).Hash
         $expected = (Get-FileHash -LiteralPath (Join-Path $root $file) -Algorithm SHA256).Hash
         if ($actual -ne $expected) { throw "Packaged file differs from source: $file" }
     }
     $version = (Get-ItemProperty -LiteralPath $key).DisplayVersion
-    if ($version -ne '0.3.0') { throw "Wrong installed version: $version" }
+    if ($version -ne '0.3.1') { throw "Wrong installed version: $version" }
     Write-Host "PASS: real installer exit 0, version $version, all changed packaged files match source"
-    $python = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\runtime\Scripts\python.exe'
-    $env:PYTHONIOENCODING = 'utf-8'
-    & $python (Join-Path $target 'windows\verify_setup.py')
-    if ($LASTEXITCODE) { throw 'Installed package GPU OCR check failed.' }
-    Write-Host 'PASS: installed package real GPU OCR'
+    if (Test-Path -LiteralPath (Join-Path $target 'data')) {
+        throw 'Silent package verification unexpectedly ran first-use setup.'
+    }
+    Write-Host 'PASS: silent installer copied the package without starting first-use downloads'
 } finally {
     if ($hadKey) {
         & reg.exe import $backup | Out-Null

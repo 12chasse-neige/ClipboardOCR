@@ -10,6 +10,10 @@ import sys
 import time
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from windows.paths import data_root
+
 REPO = "PaddlePaddle/PaddleOCR-VL-1.6-GGUF"
 REVISION = "511b09642bb324401f15f97cc23bc67e8f0a291d"
 OFFICIAL = "https://huggingface.co"
@@ -25,9 +29,8 @@ def endpoints(environ):
 
 def download():
     from huggingface_hub import snapshot_download
-    local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "ClipboardOCR"
     print(snapshot_download(REPO, revision=REVISION, allow_patterns=FILES,
-                            local_dir=local / "models/PaddleOCR-VL-1.6-GGUF", max_workers=2), flush=True)
+                            local_dir=data_root() / "models/PaddleOCR-VL-1.6-GGUF", max_workers=2), flush=True)
 
 
 def main():

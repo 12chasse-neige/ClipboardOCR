@@ -4,26 +4,24 @@ Verifies a Clipboard OCR setup executable end to end without disturbing an
 existing working installation.
 
 .DESCRIPTION
-Inno Setup identifies this application by AppId, not by directory.  When a setup
-executable finds the AppId already registered it first runs the *installed*
-version's uninstaller - and older uninstallers remove
-%LOCALAPPDATA%\ClipboardOCR\runtime and \models as part of their
-[UninstallDelete] rules.  Those two directories hold the ~6 GB GPU runtime and
-model snapshot that setup reuses, so a plain upgrade of an older build deletes
-them and forces a fresh download.
+Inno Setup identifies this application by AppId, not by directory. This script
+snapshots data belonging to the current registration (or the legacy
+%LOCALAPPDATA%\ClipboardOCR root for v0.3.0), then proves a scratch installation
+does not modify it.
 
 This script therefore:
-  1. snapshots the shared data root and saves the registration and the desktop
+  1. snapshots the existing data root and saves the registration and the desktop
      shortcut into a rollback folder,
   2. temporarily removes the AppId registration so the setup executable treats
      the machine as a fresh install and never runs the old uninstaller,
   3. installs into a scratch directory with the real setup executable,
   4. runs the same setup step the installer runs (that step is skipped by
      /SILENT) and checks the end-to-end GPU OCR result,
-  5. uninstalls the scratch copy and confirms the shared data root survived,
+  5. uninstalls the scratch copy and confirms the existing data root survived,
   6. restores the registration and the desktop shortcut.
 
-The existing installation is left byte-identical.  Rollback material stays in
+The existing data roots are checked by file-count/size inventory, setup logs,
+registration and desktop shortcut. Rollback material stays in
 %TEMP%\ClipboardOCR-install-test-<timestamp> in case anything needs inspecting.
 
 .EXAMPLE
@@ -31,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1
 Uses the newest dist\ClipboardOCR-*-setup.exe into C:\ClipboardOCR-install-test.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1 -Installer .\dist\ClipboardOCR-0.3.0-windows-x64-setup.exe -TestDir D:\ClipboardOCR-test -KeepInstall
+powershell -ExecutionPolicy Bypass -File .\windows\test_install.ps1 -Installer .\dist\ClipboardOCR-0.3.1-windows-x64-setup.exe -TestDir D:\ClipboardOCR-test -KeepInstall
 #>
 [CmdletBinding()]
 param(
@@ -45,7 +43,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $appId = '{8CA1D626-F6A6-4B7B-81F7-17886B7C43D1}'
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\${appId}_is1"
 $uninstallKeyPath = "HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\${appId}_is1"
-$dataRoot = Join-Path $env:LOCALAPPDATA 'ClipboardOCR'
+$dataRoots = @((Join-Path $env:LOCALAPPDATA 'ClipboardOCR'))
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Clipboard OCR.lnk'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $rollback = Join-Path $env:TEMP "ClipboardOCR-install-test-$stamp"
@@ -56,10 +54,10 @@ function Write-Ok([string]$text) { Write-Host "   PASS  $text" -ForegroundColor 
 function Write-Bad([string]$text) { Write-Host "   FAIL  $text" -ForegroundColor Red; [void]$problems.Add($text) }
 function Write-Info([string]$text) { Write-Host "         $text" }
 
-function Get-DataSnapshot {
+function Get-DataSnapshot([string]$rootPath) {
     $snapshot = @{}
-    foreach ($name in @('runtime', 'models', 'python')) {
-        $path = Join-Path $dataRoot $name
+    foreach ($name in @('runtime', 'models', 'python', 'downloads', 'paddlex', 'huggingface', 'uv-cache')) {
+        $path = Join-Path $rootPath $name
         $files = @(Get-ChildItem -LiteralPath $path -Recurse -File -Force -ErrorAction SilentlyContinue)
         $snapshot[$name] = @{
             Exists = (Test-Path -LiteralPath $path)
@@ -73,6 +71,10 @@ function Get-DataSnapshot {
 function Test-DataSnapshot($before, $after, [string]$label) {
     foreach ($name in $before.Keys) {
         $a = $before[$name]; $b = $after[$name]
+        if ($a.Exists -ne $b.Exists) {
+            Write-Bad "$label`: $name directory presence changed ($($a.Exists) -> $($b.Exists))"
+            continue
+        }
         if ($a.Exists -and (-not $b.Exists)) { Write-Bad "$label`: $name directory is gone"; continue }
         if ($name -eq 'runtime') {
             # Setup legitimately refreshes packages inside the runtime - with a cold
@@ -101,8 +103,11 @@ function Stop-ClipboardOcrProcesses {
             $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$($process.Id)" -ErrorAction Stop).CommandLine
             if ($commandLine -and $commandLine -match 'ClipboardOCR|launch\.py|PaddleOCR-VL-1\.6-GGUF') { $isOurs = $true }
         } catch { }
-        if (-not $isOurs -and $process.ProcessName -eq 'llama-server') { $isOurs = $true }
-        if (-not $isOurs -and $process.Path -and $process.Path.StartsWith((Join-Path $dataRoot 'python'), 'OrdinalIgnoreCase')) { $isOurs = $true }
+        if (-not $isOurs -and $process.Path) {
+            foreach ($dataRoot in $dataRoots) {
+                if ($process.Path.StartsWith((Join-Path $dataRoot 'python'), 'OrdinalIgnoreCase')) { $isOurs = $true; break }
+            }
+        }
         if ($isOurs) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             $stopped++
@@ -124,27 +129,49 @@ $Installer = [IO.Path]::GetFullPath($Installer)
 $TestDir = [IO.Path]::GetFullPath($TestDir).TrimEnd('\')
 
 if ($TestDir -eq ([IO.Path]::GetFullPath($root)).TrimEnd('\')) { throw 'The test directory must differ from this checkout.' }
-if ((Test-Path -LiteralPath $TestDir) -and @(Get-ChildItem -LiteralPath $TestDir -Force -ErrorAction SilentlyContinue).Count) {
+if (Test-Path -LiteralPath $TestDir) {
     $existing = Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction SilentlyContinue
     if ($existing -and $existing.InstallLocation -and ([IO.Path]::GetFullPath($existing.InstallLocation).TrimEnd('\') -eq $TestDir)) {
         throw "$TestDir is itself the registered installation; refusing to touch it."
     }
-    Write-Info "Removing leftovers in $TestDir"
-    Remove-Item -LiteralPath $TestDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (@(Get-ChildItem -LiteralPath $TestDir -Force -ErrorAction SilentlyContinue).Count) {
+        throw "Test directory is not empty; refusing to delete user files: $TestDir"
+    }
 }
 
 Write-Info "Setup executable: $Installer"
 Write-Info ("SHA256          : {0}" -f (Get-FileHash -Algorithm SHA256 -LiteralPath $Installer).Hash)
 Write-Info "Test directory  : $TestDir"
 $registered = Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction SilentlyContinue
+if ($registered -and $registered.InstallLocation) {
+    $registeredData = Join-Path $registered.InstallLocation 'data'
+    if (Test-Path -LiteralPath $registeredData) { $dataRoots += $registeredData }
+}
+$dataRoots = @($dataRoots | Select-Object -Unique)
 if ($registered) { Write-Info ("Registered now  : {0} at {1}" -f $registered.DisplayName, $registered.InstallLocation) }
 else { Write-Info 'Registered now  : nothing (fresh-install path)' }
 New-Item -ItemType Directory -Path $rollback -Force | Out-Null
 Write-Info "Rollback folder : $rollback"
 
-$baseline = Get-DataSnapshot
+$baselines = @{}
+foreach ($dataRoot in $dataRoots) { $baselines[$dataRoot] = Get-DataSnapshot $dataRoot }
 $hadRegistration = [bool]$registered
 $hadShortcut = Test-Path -LiteralPath $shortcutPath
+$logDir = Join-Path $env:LOCALAPPDATA 'ClipboardOCR\logs'
+$logDirExisted = Test-Path -LiteralPath $logDir
+$logParent = Split-Path -Parent $logDir
+$logParentExisted = Test-Path -LiteralPath $logParent
+$setupLogNames = @('setup.log', 'download_models.out.log', 'download_models.err.log', 'download_paddle.out.log', 'download_paddle.err.log', 'verify_setup.out.log', 'verify_setup.err.log')
+$logSnapshot = Join-Path $rollback 'logs'
+$logExisted = @{}
+foreach ($name in $setupLogNames) {
+    $path = Join-Path $logDir $name
+    $logExisted[$name] = Test-Path -LiteralPath $path
+    if ($logExisted[$name]) {
+        New-Item -ItemType Directory -Path $logSnapshot -Force | Out-Null
+        Copy-Item -LiteralPath $path -Destination (Join-Path $logSnapshot $name) -Force
+    }
+}
 
 try {
     # ------------------------------------------------- 1. protect + install
@@ -171,7 +198,7 @@ try {
     elseif ($install.ExitCode -ne 0) { Write-Bad "installer exit code $($install.ExitCode)" }
     else { Write-Ok 'installer exit code 0' }
 
-    foreach ($file in @('windows\launch.py', 'windows\setup.ps1', 'windows\setup.cmd', 'backend\engine_windows.py', '.windows\tools\llama\llama-server.exe', 'unins000.exe')) {
+    foreach ($file in @('windows\launch.py', 'windows\paths.py', 'windows\setup.ps1', 'windows\setup.cmd', 'backend\engine_windows.py', '.windows\tools\llama\llama-server.exe', 'unins000.exe')) {
         if (Test-Path -LiteralPath (Join-Path $TestDir $file)) { Write-Ok "installed $file" } else { Write-Bad "missing $file" }
     }
     $registration = Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction SilentlyContinue
@@ -179,7 +206,7 @@ try {
 
     # ------------------------------- 3. run the setup step /SILENT skips
     Write-Step '3. Run the setup step the installer skips under /SILENT'
-    $setupLog = Join-Path $dataRoot 'logs\setup.log'
+    $setupLog = Join-Path $logDir 'setup.log'
     $logLinesBefore = 0
     if (Test-Path -LiteralPath $setupLog) { $logLinesBefore = @(Get-Content -LiteralPath $setupLog -ErrorAction SilentlyContinue).Count }
     # setup.cmd keeps its window open with `pause` when setup fails, so an
@@ -233,7 +260,17 @@ try {
     if (Test-Path -LiteralPath $shortcutPath) { Write-Ok 'desktop shortcut created' } else { Write-Bad 'desktop shortcut missing' }
 
     Write-Step '4. Shared data root after installing'
-    Test-DataSnapshot $baseline (Get-DataSnapshot) 'after install'
+    foreach ($dataRoot in $dataRoots) {
+        Test-DataSnapshot $baselines[$dataRoot] (Get-DataSnapshot $dataRoot) "existing data at $dataRoot after install"
+    }
+    foreach ($relative in @('data\python', 'data\runtime', 'data\uv-cache', 'data\paddlex', 'data\models', 'data\downloads')) {
+        if (Test-Path -LiteralPath (Join-Path $TestDir $relative)) { Write-Ok "new install data is on selected drive: $relative" }
+        else { Write-Bad "selected-drive install data is missing: $relative" }
+    }
+    $dataMarker = Join-Path $TestDir 'data\.uninstall-preserve-check'
+    if (-not $KeepInstall -and (Test-Path -LiteralPath (Split-Path -Parent $dataMarker))) {
+        Set-Content -LiteralPath $dataMarker -Value 'scratch test marker' -Encoding ASCII
+    }
 
     # ------------------------------------------------------- 5. teardown
     Write-Step '5. Remove the scratch installation'
@@ -255,12 +292,38 @@ try {
             if ($uninstall.HasExited -and $uninstall.ExitCode -eq 0) { Write-Ok 'uninstaller exit code 0' }
             else { Write-Bad "uninstaller exit code $($uninstall.ExitCode)" }
         } else { Write-Bad 'unins000.exe is missing' }
+        if (Test-Path -LiteralPath $dataMarker) { Write-Ok 'app-local data survives the normal uninstaller' }
+        else { Write-Bad 'app-local data was removed by the normal uninstaller' }
+        $managedPythonRoot = Join-Path $TestDir 'data\python'
+        $managedPythonLink = Join-Path $managedPythonRoot 'cpython-3.12-windows-x86_64-none'
+        $linkItem = Get-ChildItem -LiteralPath $managedPythonRoot -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq 'cpython-3.12-windows-x86_64-none' } | Select-Object -First 1
+        if ($linkItem) {
+            $pythonRoot = [IO.Path]::GetFullPath((Join-Path $TestDir 'data\python')).TrimEnd('\')
+            $linkParent = [IO.Path]::GetFullPath($linkItem.Parent.FullName).TrimEnd('\')
+            $managedPythonTarget = [IO.Path]::GetFullPath((Join-Path $managedPythonRoot 'cpython-3.12.13-windows-x86_64-none')).TrimEnd('\')
+            $linkTarget = if ($linkItem.Target) { [IO.Path]::GetFullPath([string]$linkItem.Target).TrimEnd('\') } else { '' }
+            if (($linkItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+                $linkItem.LinkType -eq 'Junction' -and
+                $linkParent.Equals($pythonRoot, [StringComparison]::OrdinalIgnoreCase) -and
+                $linkTarget.Equals($managedPythonTarget, [StringComparison]::OrdinalIgnoreCase)) {
+                # PowerShell 5.1 can throw NullReferenceException for this directory junction.
+                # .NET Delete removes the junction itself without traversing into its target.
+                [IO.Directory]::Delete($managedPythonLink)
+                if ((Test-Path -LiteralPath $managedPythonLink) -or -not (Test-Path -LiteralPath $managedPythonTarget)) {
+                    throw 'Could not safely remove the temporary Python junction or its target changed.'
+                }
+                Write-Ok 'removed only uv-managed Python compatibility junction before scratch cleanup'
+            }
+        }
         for ($attempt = 0; $attempt -lt 3 -and (Test-Path -LiteralPath $TestDir); $attempt++) {
             Start-Sleep -Seconds 3
             Remove-Item -LiteralPath $TestDir -Recurse -Force -ErrorAction SilentlyContinue
         }
         if (Test-Path -LiteralPath $TestDir) { Write-Bad "leftover files in $TestDir" } else { Write-Ok 'scratch directory removed' }
-        Test-DataSnapshot $baseline (Get-DataSnapshot) 'after uninstall'
+        foreach ($dataRoot in $dataRoots) {
+            Test-DataSnapshot $baselines[$dataRoot] (Get-DataSnapshot $dataRoot) "existing data at $dataRoot after uninstall"
+        }
     }
 }
 finally {
@@ -280,8 +343,37 @@ finally {
     if ($hadShortcut -and (Test-Path -LiteralPath (Join-Path $rollback 'Clipboard OCR.lnk'))) {
         Copy-Item -LiteralPath (Join-Path $rollback 'Clipboard OCR.lnk') -Destination $shortcutPath -Force
         Write-Ok 'desktop shortcut restored'
+    } elseif (-not $hadShortcut -and (Test-Path -LiteralPath $shortcutPath)) {
+        $shell = New-Object -ComObject WScript.Shell
+        $testLink = $shell.CreateShortcut($shortcutPath)
+        $expectedPrefix = [IO.Path]::GetFullPath((Join-Path $TestDir 'data\python')).TrimEnd('\') + '\'
+        $expectedScript = [IO.Path]::GetFullPath((Join-Path $TestDir 'windows\launch.py'))
+        if ([IO.Path]::GetFullPath($testLink.TargetPath).StartsWith($expectedPrefix, [StringComparison]::OrdinalIgnoreCase) -and
+            $testLink.Arguments.Trim('"').Equals($expectedScript, [StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $shortcutPath -Force
+            Write-Ok 'removed only the scratch-install desktop shortcut'
+        } else {
+            Write-Bad 'desktop shortcut was not restored because it no longer matches the test-created target'
+        }
     }
-    Test-DataSnapshot $baseline (Get-DataSnapshot) 'final'
+    foreach ($dataRoot in $dataRoots) {
+        Test-DataSnapshot $baselines[$dataRoot] (Get-DataSnapshot $dataRoot) "existing data at $dataRoot final"
+    }
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    foreach ($name in $setupLogNames) {
+        $path = Join-Path $logDir $name
+        if ($logExisted[$name]) { Copy-Item -LiteralPath (Join-Path $logSnapshot $name) -Destination $path -Force }
+        elseif (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+    }
+    if (-not $logDirExisted -and (Test-Path -LiteralPath $logDir) -and
+        @(Get-ChildItem -LiteralPath $logDir -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+        Remove-Item -LiteralPath $logDir -Force
+    }
+    if (-not $logParentExisted -and (Test-Path -LiteralPath $logParent) -and
+        @(Get-ChildItem -LiteralPath $logParent -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+        Remove-Item -LiteralPath $logParent -Force
+    }
+    Write-Ok 'restored the pre-test setup/download logs in LocalAppData'
     Write-Info "Rollback material kept in $rollback"
 }
 

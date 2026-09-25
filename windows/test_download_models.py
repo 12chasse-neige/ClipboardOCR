@@ -1,5 +1,7 @@
 import os
+import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -26,6 +28,14 @@ class DownloadTests(unittest.TestCase):
              patch.object(models.time, "sleep"):
             self.assertEqual(models.main(), 1)
             self.assertEqual(run.call_count, 4)
+
+    def test_model_snapshot_uses_install_data_directory(self):
+        calls = []
+        fake_hub = SimpleNamespace(snapshot_download=lambda *args, **kwargs: calls.append((args, kwargs)) or "ok")
+        with patch.dict(sys.modules, {"huggingface_hub": fake_hub}), \
+             patch.object(models, "data_root", return_value=Path("D:/ClipboardOCR/data")):
+            models.download()
+        self.assertEqual(calls[0][1]["local_dir"], Path("D:/ClipboardOCR/data/models/PaddleOCR-VL-1.6-GGUF"))
 
 
 if __name__ == "__main__":
